@@ -5,7 +5,7 @@ layout(location = 0) out vec4 f_color;
 
 layout(set = 0, binding = 0) uniform sampler2D g_position;
 layout(set = 0, binding = 1) uniform sampler2D g_normal;
-/* layout(set = 0, binding = 3) uniform sampler2D noise_tex; */
+layout(set = 0, binding = 2) uniform sampler2D noise_tex;
 layout(set = 1, binding = 0) uniform Data {
     mat4 view;
     mat4 projection;
@@ -24,8 +24,7 @@ const vec2 noise_scale = vec2(1856.0/4.0, 1016.0/4.0);
 void main() {
     vec3 frag_pos = texture(g_position, tex_coords).xyz;
     vec3 normal = texture(g_normal, tex_coords).xyz;
-    /* vec3 random_vec = normalize(texture(noise_tex, tex_coords * noise_scale).xyz); */
-    vec3 random_vec = vec3(0.7, 0.7, 0.7);
+    vec3 random_vec = normalize(texture(noise_tex, tex_coords * noise_scale).xyz);
 
     vec3 tangent   = normalize(random_vec - normal * dot(random_vec, normal));
     vec3 bitangent = cross(normal, tangent);

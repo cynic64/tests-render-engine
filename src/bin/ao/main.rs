@@ -1,12 +1,17 @@
 // TODO: you shouldn't have to use vulkano much
+// and don't import everything from render-engine
 use render_engine::*;
 use render_engine::input::VirtualKeyCode;
+use render_engine::producer::{ImageProducer, BufferProducer};
 
 use vulkano::pipeline::GraphicsPipeline;
 use vulkano::framebuffer::Subpass;
 use vulkano::buffer::BufferAccess;
-use vulkano::device::Device;
+use vulkano::device::{Device, Queue};
 use vulkano::format::Format;
+use vulkano::image::{Dimensions, ImmutableImage};
+use vulkano::image::traits::ImageViewAccess;
+use vulkano::sync::GpuFuture;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -87,7 +92,7 @@ fn main() {
     );
     let pass2 = system::SimplePass {
         images_created: vec!["ao_color"],
-        images_needed: vec!["position", "normal"],
+        images_needed: vec!["position", "normal", "ao_noise"],
         resources_needed: vec!["view_proj", "ao_samples"],
         render_pass: ao_render_pass,
         pipeline: ao_pipeline,
@@ -102,10 +107,10 @@ fn main() {
     let mut camera = OrbitCamera::default();
     camera.orbit_distance = 20.0;
     let camera_p = Box::new(camera);
-    let noise_p = Box::new(AONoiseProducer::new(app.get_device()));
-    let producer_collection = producer::ProducerCollection::new(vec![camera_p, noise_p]);
+    let sample_p = Box::new(AOSampleProducer::new(app.get_device()));
+    let noise_p = Box::new(AONoiseTexProducer::new(app.get_queue()));
+    let producer_collection = producer::ProducerCollection::new(vec![noise_p], vec![camera_p, sample_p]);
     app.set_producers(producer_collection);
-
 
     let mut world_com = app.get_world_com();
 
@@ -133,7 +138,7 @@ fn relative_path(local_path: &str) -> PathBuf {
     [env!("CARGO_MANIFEST_DIR"), local_path].iter().collect()
 }
 
-struct AONoiseProducer {
+struct AOSampleProducer {
     noise_buffer: Arc<dyn BufferAccess + Send + Sync>,
 }
 
@@ -142,7 +147,7 @@ struct AOSamples {
     samples: [[f32; 4]; 32],
 }
 
-impl AONoiseProducer {
+impl AOSampleProducer {
     fn new(device: Arc<Device>) -> Self {
         let mut ssao_kernel = [[0.0; 4]; 32];
         for x in 0..32 {
@@ -178,13 +183,62 @@ impl AONoiseProducer {
     }
 }
 
-use producer::ResourceProducer;
-impl ResourceProducer for AONoiseProducer {
+impl BufferProducer for AOSampleProducer {
     fn create_buffer(&self, _device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync> {
         self.noise_buffer.clone()
     }
 
     fn name(&self) -> &str {
         "ao_samples"
+    }
+}
+
+struct AONoiseTexProducer {
+    noise_image: Arc<dyn ImageViewAccess + Send + Sync>,
+}
+
+impl AONoiseTexProducer {
+    fn new(queue: Arc<Queue>) -> Self {
+        let ssao_noise: Vec<[f32; 4]> = (0..16)
+            .map(|_| {
+                [
+                    rand::random::<f32>() * 2.0 - 1.0,
+                    rand::random::<f32>() * 2.0 - 1.0,
+                    0.0,
+                    0.0,
+                ]
+            })
+            .collect();
+
+        let (noise_tex, noise_tex_future) = ImmutableImage::from_iter(
+            ssao_noise.iter().cloned(),
+            Dimensions::Dim2d {
+                width: 4,
+                height: 4,
+            },
+            Format::R32G32B32A32Sfloat,
+            queue.clone(),
+        )
+            .unwrap();
+
+        noise_tex_future
+            .then_signal_fence_and_flush()
+            .unwrap()
+            .wait(None)
+            .unwrap();
+
+        Self {
+            noise_image: noise_tex,
+        }
+    }
+}
+
+impl ImageProducer for AONoiseTexProducer {
+    fn create_image(&self, _device: Arc<Device>) -> Arc<dyn ImageViewAccess + Send + Sync> {
+        self.noise_image.clone()
+    }
+
+    fn name(&self) -> &str {
+        "ao_noise"
     }
 }
