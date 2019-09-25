@@ -3,6 +3,7 @@ use render_engine as re;
 use re::{App, mesh_gen, OrbitCamera};
 use re::world::ObjectSpecBuilder;
 use re::producer::ProducerCollection;
+use re::input::VirtualKeyCode;
 
 use std::path::PathBuf;
 
@@ -24,6 +25,13 @@ pub fn main() {
     app.set_producers(producers);
 
     while !app.done {
+        // TODO: if you break after draw_frame the program hangs. the hanging
+        // really sucks and can happen in a lot of situations, fix it!
+        let frame_info = app.get_frame_info();
+        if frame_info.keydowns.contains(&VirtualKeyCode::Escape) {
+            break;
+        }
+
         app.draw_frame();
     }
 
