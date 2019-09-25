@@ -11,7 +11,7 @@ pub fn main() {
     let mut app = App::new();
     let mut world_com = app.get_world_com();
 
-    let path = relative_path("dragon.obj");
+    let path = relative_path("meshes/dragon.obj");
     let dragon_mesh = mesh_gen::load_obj(&path).unwrap();
     let dragon = ObjectSpecBuilder::default()
         .mesh(dragon_mesh)

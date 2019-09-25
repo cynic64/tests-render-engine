@@ -8,6 +8,9 @@ edition = "2018"
 
 [dependencies]
 render-engine = { path = "../render-engine/" }
+nalgebra-glm = "0.4.2"
+vulkano = "0.14"
+rand = "0.7.2"
 
 [profile.release]
 debug = true
