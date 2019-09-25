@@ -3,8 +3,8 @@
 layout(location = 0) in vec2 tex_coords;
 layout(location = 0) out vec4 f_color;
 
-layout(set = 0, binding = 0) uniform sampler2D position;
-layout(set = 0, binding = 1) uniform sampler2D normal;
+layout(set = 0, binding = 0) uniform sampler2D g_position;
+layout(set = 0, binding = 1) uniform sampler2D g_normal;
 /* layout(set = 0, binding = 3) uniform sampler2D noise_tex; */
 layout(set = 1, binding = 0) uniform Data {
     mat4 view;
@@ -22,8 +22,8 @@ const float radius = 0.5;
 const vec2 noise_scale = vec2(1856.0/4.0, 1016.0/4.0);
 
 void main() {
-    vec3 frag_pos = texture(position, tex_coords).xyz;
-    vec3 normal = texture(normal, tex_coords).xyz;
+    vec3 frag_pos = texture(g_position, tex_coords).xyz;
+    vec3 normal = texture(g_normal, tex_coords).xyz;
     /* vec3 random_vec = normalize(texture(noise_tex, tex_coords * noise_scale).xyz); */
     vec3 random_vec = vec3(0.7, 0.7, 0.7);
 
@@ -35,7 +35,7 @@ void main() {
     frag_offset = view_proj.projection * frag_offset;
     frag_offset.xyz /= frag_offset.w;
     frag_offset.xyz = frag_offset.xyz * 0.5 + 0.5;
-    float frag_depth = texture(position, frag_offset.xy).z;
+    float frag_depth = texture(g_position, frag_offset.xy).z;
 
     float occlusion = 0.0;
     for (int i = 0; i < 32; i++) {
@@ -47,7 +47,7 @@ void main() {
         offset.xyz /= offset.w;               // perspective divide
         offset.xyz  = offset.xyz * 0.5 + 0.5; // transform to range 0.0 - 1.0
 
-        float sample_depth = texture(position, offset.xy).z;
+        float sample_depth = texture(g_position, offset.xy).z;
         float range_check = smoothstep(0.0, 1.0, radius / abs(frag_pos.z - sample_depth));
 
         occlusion += (sample_depth >= frag_depth + bias ? 1.0 : 0.0) * range_check;
