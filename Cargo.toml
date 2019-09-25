@@ -1,0 +1,13 @@
+[package]
+name = "tests-render-engine"
+version = "0.1.0"
+authors = ["cynic64 <f3bl@gmx.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+render-engine = { path = "../render-engine/" }
+
+[profile.release]
+debug = true
