@@ -13,7 +13,6 @@ pub fn main() {
     let verts_cube_1 = mesh_gen::create_vertices_for_cube([0.0, 0.0, 0.0], 1.0);
     let verts_cube_2 = mesh_gen::create_vertices_for_cube([2.0, 1.0, 3.0], 0.5);
     let verts_cube_edges = mesh_gen::create_vertices_for_cube_edges([-2.0, 1.0, 1.0], 0.6);
-    let verts_sphere = mesh_gen::create_vertices_for_sphere([0.0, 3.0, 0.0], 0.5);
 
     let spec_cube_1 = ObjectSpecBuilder::default()
         .mesh(verts_cube_1)
@@ -25,15 +24,11 @@ pub fn main() {
         .mesh(verts_cube_edges)
         .fill_type(PrimitiveTopology::LineList)
         .build(app.get_device());
-    let spec_sphere = ObjectSpecBuilder::default()
-        .mesh(verts_sphere)
-        .build(app.get_device());
 
     let mut world_com = app.get_world_com();
     world_com.add_object_from_spec("cube 1", spec_cube_1);
     world_com.add_object_from_spec("cube 2", spec_cube_2);
     world_com.add_object_from_spec("cube edges", spec_cube_edges);
-    world_com.add_object_from_spec("sphere", spec_sphere);
 
     // change camera to one with a farther orbit distance
     let mut camera = OrbitCamera::default();

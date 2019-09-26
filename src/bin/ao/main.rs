@@ -19,6 +19,9 @@ use std::sync::Arc;
 use nalgebra_glm::*;
 
 fn main() {
+    let path = relative_path("meshes/happy.obj");
+    let happy_mesh = mesh_gen::load_obj(&path).unwrap();
+
     let mut app = App::new();
 
     let geo_render_pass = Arc::new(
@@ -115,13 +118,18 @@ fn main() {
 
     let mut world_com = app.get_world_com();
 
-    let path = relative_path("meshes/happy.obj");
-    let dragon_mesh = mesh_gen::load_obj(&path).unwrap();
-    let dragon = ObjectSpecBuilder::default()
-        .mesh(dragon_mesh)
+    let happy = ObjectSpecBuilder::default()
+        .mesh(happy_mesh)
+        .shaders(geo_shaders.clone())
+        .build(app.get_device());
+    let cube_mesh = mesh_gen::create_vertices_for_cube([6.0, 0.0, 0.0], 4.0);
+    let cube = ObjectSpecBuilder::default()
+        .mesh(cube_mesh)
         .shaders(geo_shaders)
         .build(app.get_device());
-    world_com.add_object_from_spec("dragon", dragon);
+    world_com.add_object_from_spec("happy", happy);
+
+    world_com.add_object_from_spec("cube", cube);
 
     while !app.done {
         let frame_info = app.get_frame_info();

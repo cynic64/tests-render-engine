@@ -19,7 +19,7 @@ layout(set = 1, binding = 2) uniform ThirdData {
 } dimensions;
 
 const float bias = 0.025;
-const float radius = 0.5;
+const float radius = 1.0;
 
 void main() {
     // tile noise texture over screen based on screen dimensions divided by noise size
