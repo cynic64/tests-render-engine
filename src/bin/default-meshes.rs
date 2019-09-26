@@ -38,7 +38,7 @@ pub fn main() {
     // change camera to one with a farther orbit distance
     let mut camera = OrbitCamera::default();
     camera.orbit_distance = 10.0;
-    let producers = ProducerCollection::new(vec![Box::new(camera)]);
+    let producers = ProducerCollection::new(vec![], vec![Box::new(camera)]);
     app.set_producers(producers);
 
     while !app.done {
