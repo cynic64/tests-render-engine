@@ -15,16 +15,16 @@ layout(set = 1, binding = 1) uniform OtherData {
     vec4 samples[32];
 } ao_samples;
 layout(set = 1, binding = 2) uniform ThirdData {
-    unsigned int[2] dimensions;
-}
+    uint[2] dimensions;
+} dimensions;
 
 const float bias = 0.025;
 const float radius = 0.5;
 
-// tile noise texture over screen based on screen dimensions divided by noise size
-const vec2 noise_scale = vec2(1856.0/4.0, 1016.0/4.0);
-
 void main() {
+    // tile noise texture over screen based on screen dimensions divided by noise size
+    vec2 noise_scale = vec2(dimensions.dimensions[0]/4.0, dimensions.dimensions[1]/4.0);
+
     vec3 frag_pos = texture(g_position, tex_coords).xyz;
     vec3 normal = texture(g_normal, tex_coords).xyz;
     vec3 random_vec = normalize(texture(noise_tex, tex_coords * noise_scale).xyz);

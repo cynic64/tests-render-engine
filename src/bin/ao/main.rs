@@ -1,7 +1,7 @@
 // TODO: you shouldn't have to use vulkano much
 // and don't import everything from render-engine
 use render_engine::*;
-use render_engine::input::VirtualKeyCode;
+use render_engine::input::{FrameInfo, VirtualKeyCode};
 use render_engine::producer::{ImageProducer, BufferProducer};
 
 use vulkano::pipeline::GraphicsPipeline;
@@ -109,7 +109,8 @@ fn main() {
     let camera_p = Box::new(camera);
     let sample_p = Box::new(AOSampleProducer::new(app.get_device()));
     let noise_p = Box::new(AONoiseTexProducer::new(app.get_queue()));
-    let producer_collection = producer::ProducerCollection::new(vec![noise_p], vec![camera_p, sample_p]);
+    let dims_p = Box::new(DimensionsProducer::new());
+    let producer_collection = producer::ProducerCollection::new(vec![noise_p], vec![camera_p, sample_p, dims_p]);
     app.set_producers(producer_collection);
 
     let mut world_com = app.get_world_com();
@@ -243,34 +244,39 @@ impl ImageProducer for AONoiseTexProducer {
     }
 }
 
-struct DimensionsProucer {
+struct DimensionsProducer {
     dimensions: [u32; 2],
 }
 
-struct Dimensions {
+#[allow(dead_code)]
+struct DimensionsUniform {
     dimensions: [u32; 2],
 }
 
 impl DimensionsProducer {
+    fn new() -> Self {
+        Self {
+            dimensions: [0; 2],
+        }
+    }
+}
+
+impl BufferProducer for DimensionsProducer {
     fn update(&mut self, frame_info: FrameInfo) {
         self.dimensions = frame_info.dimensions;
     }
 
     fn create_buffer(&self, device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync> {
-        let pool = vulkano::buffer::cpu_pool::CpuBufferPool::<Dimensions>::new(
+        let pool = vulkano::buffer::cpu_pool::CpuBufferPool::<DimensionsUniform>::new(
             device.clone(),
             vulkano::buffer::BufferUsage::all(),
         );
 
-        let buffer = {
-            let uniform_data = Dimensions {
-                dimensions: self.dimensions,
-            };
-
-            pool.next(uniform_data).unwrap()
+        let uniform_data = DimensionsUniform {
+            dimensions: self.dimensions,
         };
 
-        buffer
+        Arc::new(pool.next(uniform_data).unwrap())
     }
 
     fn name(&self) -> &str {
