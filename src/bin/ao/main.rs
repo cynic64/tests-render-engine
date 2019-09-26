@@ -93,7 +93,7 @@ fn main() {
     let pass2 = system::SimplePass {
         images_created: vec!["ao_color"],
         images_needed: vec!["position", "normal", "ao_noise"],
-        resources_needed: vec!["view_proj", "ao_samples"],
+        resources_needed: vec!["view_proj", "ao_samples", "dimensions"],
         render_pass: ao_render_pass,
         pipeline: ao_pipeline,
     };
@@ -240,5 +240,40 @@ impl ImageProducer for AONoiseTexProducer {
 
     fn name(&self) -> &str {
         "ao_noise"
+    }
+}
+
+struct DimensionsProucer {
+    dimensions: [u32; 2],
+}
+
+struct Dimensions {
+    dimensions: [u32; 2],
+}
+
+impl DimensionsProducer {
+    fn update(&mut self, frame_info: FrameInfo) {
+        self.dimensions = frame_info.dimensions;
+    }
+
+    fn create_buffer(&self, device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync> {
+        let pool = vulkano::buffer::cpu_pool::CpuBufferPool::<Dimensions>::new(
+            device.clone(),
+            vulkano::buffer::BufferUsage::all(),
+        );
+
+        let buffer = {
+            let uniform_data = Dimensions {
+                dimensions: self.dimensions,
+            };
+
+            pool.next(uniform_data).unwrap()
+        };
+
+        buffer
+    }
+
+    fn name(&self) -> &str {
+        "dimensions"
     }
 }

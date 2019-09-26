@@ -14,6 +14,9 @@ layout(set = 1, binding = 0) uniform Data {
 layout(set = 1, binding = 1) uniform OtherData {
     vec4 samples[32];
 } ao_samples;
+layout(set = 1, binding = 2) uniform ThirdData {
+    unsigned int[2] dimensions;
+}
 
 const float bias = 0.025;
 const float radius = 0.5;
