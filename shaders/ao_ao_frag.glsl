@@ -12,14 +12,14 @@ layout(set = 1, binding = 0) uniform Data {
 } view_proj;
 // TODO: try removing the unnecessary Data
 layout(set = 1, binding = 1) uniform OtherData {
-    vec4 samples[32];
+    vec4 samples[64];
 } ao_samples;
 layout(set = 1, binding = 2) uniform ThirdData {
     uint[2] dimensions;
 } dimensions;
 
 const float bias = 0.025;
-const float radius = 1.0;
+const float radius = 0.5;
 
 void main() {
     // tile noise texture over screen based on screen dimensions divided by noise size
@@ -40,7 +40,7 @@ void main() {
     float frag_depth = texture(g_position, frag_offset.xy).z;
 
     float occlusion = 0.0;
-    for (int i = 0; i < 32; i++) {
+    for (int i = 0; i < 64; i++) {
         vec3 c_sample = TBN * ao_samples.samples[i].xyz;
         c_sample = frag_pos + c_sample * radius;
 
@@ -55,6 +55,6 @@ void main() {
         occlusion += (sample_depth >= frag_depth + bias ? 1.0 : 0.0) * range_check;
     }
 
-    occlusion = 1.0 - (occlusion / 32.0);
+    occlusion = 1.0 - (occlusion / 64.0);
     f_color = vec4(occlusion, occlusion, occlusion, 1.0);
 }

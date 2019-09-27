@@ -153,13 +153,13 @@ struct AOSampleProducer {
 
 #[allow(dead_code)]
 struct AOSamples {
-    samples: [[f32; 4]; 32],
+    samples: [[f32; 4]; 64],
 }
 
 impl AOSampleProducer {
     fn new(device: Arc<Device>) -> Self {
-        let mut ssao_kernel = [[0.0; 4]; 32];
-        for x in 0..32 {
+        let mut ssao_kernel = [[0.0; 4]; 64];
+        for x in 0..64 {
             let mut sample = vec3(
                 rand::random::<f32>() * 2.0 - 1.0,
                 rand::random::<f32>(),
@@ -167,7 +167,7 @@ impl AOSampleProducer {
             );
             sample = normalize(&sample);
             sample *= rand::random::<f32>();
-            let mut scale = (x as f32) / 32.0;
+            let mut scale = (x as f32) / 64.0;
             scale = lerp_scalar(0.1, 1.0, scale * scale);
             sample *= scale;
             ssao_kernel[x] = [sample.x, sample.y, sample.z, 0.0];
