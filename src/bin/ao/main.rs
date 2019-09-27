@@ -162,8 +162,8 @@ impl AOSampleProducer {
         for x in 0..32 {
             let mut sample = vec3(
                 rand::random::<f32>() * 2.0 - 1.0,
-                rand::random::<f32>() * 2.0 - 1.0,
                 rand::random::<f32>(),
+                rand::random::<f32>() * 2.0 - 1.0,
             );
             sample = normalize(&sample);
             sample *= rand::random::<f32>();
