@@ -1,20 +1,18 @@
-#version 330 core
-out float frag_color;
-  
-in vec2 tex_coords;
-  
-uniform sampler2D ssaoInput;
+#version 450
+
+layout(location = 0) in vec2 tex_coords;
+layout(location = 0) out float occlusion;
+
+layout(set = 0, binding = 0) uniform sampler2D ssao;
 
 void main() {
-    vec2 texel_size = 1.0 / vec2(textureSize(ssao_input, 0));
+    vec2 texel_size = 1.0 / vec2(textureSize(ssao, 0));
     float result = 0.0;
-    for (int x = -2; x < 2; ++x) 
-    {
-        for (int y = -2; y < 2; ++y) 
-        {
+    for (int x = -3; x < 2; ++x) {
+        for (int y = -2; y < 2; ++y) {
             vec2 offset = vec2(float(x), float(y)) * texel_size;
-            result += texture(ssao_input, tex_coords + offset).r;
+            result += texture(ssao, tex_coords + offset).r;
         }
     }
-    frag_color = result / (4.0 * 4.0);
+    occlusion = result / (4.0 * 4.0);
 }

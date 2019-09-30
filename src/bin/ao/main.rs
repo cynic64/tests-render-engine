@@ -1,16 +1,16 @@
 // TODO: you shouldn't have to use vulkano much
 // and don't import everything from render-engine
-use render_engine::*;
 use render_engine::input::{FrameInfo, VirtualKeyCode};
-use render_engine::producer::{ImageProducer, BufferProducer};
+use render_engine::producer::{BufferProducer, ImageProducer};
+use render_engine::*;
 
-use vulkano::pipeline::GraphicsPipeline;
-use vulkano::framebuffer::Subpass;
 use vulkano::buffer::BufferAccess;
 use vulkano::device::{Device, Queue};
 use vulkano::format::Format;
-use vulkano::image::{Dimensions, ImmutableImage};
+use vulkano::framebuffer::Subpass;
 use vulkano::image::traits::ImageViewAccess;
+use vulkano::image::{Dimensions, ImmutableImage};
+use vulkano::pipeline::GraphicsPipeline;
 use vulkano::sync::GpuFuture;
 
 use std::path::PathBuf;
@@ -19,7 +19,7 @@ use std::sync::Arc;
 use nalgebra_glm::*;
 
 fn main() {
-    let path = relative_path("meshes/happy.obj");
+    let path = relative_path("meshes/dragon.obj");
     let happy_mesh = mesh_gen::load_obj(&path).unwrap();
 
     let mut app = App::new();
@@ -67,20 +67,50 @@ fn main() {
     let geo_shaders =
         shaders::ShaderSystem::load_from_file(app.get_device(), &geo_vs_path, &geo_fs_path);
 
-    let deferred_vs_path = relative_path("shaders/ao_ao_vert.glsl");
+    let deferred_vs_path = relative_path("shaders/ao_simple_vert.glsl");
     let ao_fs_path = relative_path("shaders/ao_ao_frag.glsl");
     let ao_shaders =
         shaders::ShaderSystem::load_from_file(app.get_device(), &deferred_vs_path, &ao_fs_path);;
 
+    let blur_fs_path = relative_path("shaders/ao_blur_frag.glsl");
+    let blur_shaders =
+        shaders::ShaderSystem::load_from_file(app.get_device(), &deferred_vs_path, &blur_fs_path);
+
+    // TODO: don't load deferred shader twice
+    let final_fs_path = relative_path("shaders/ao_final_frag.glsl");
+    let final_shaders =
+        shaders::ShaderSystem::load_from_file(app.get_device(), &deferred_vs_path, &final_fs_path);
+
     // create system
-    let pass1 = system::ComplexPass {
+    let geo_pass = system::ComplexPass {
         images_needed: vec![],
         images_created: vec!["position", "color", "normal", "depth"],
         resources_needed: vec!["view_proj"],
         render_pass: geo_render_pass,
     };
 
+    /*
+    let ao_render_pass = Arc::new(
+        vulkano::single_pass_renderpass!(
+            app.get_device(),
+            attachments: {
+                color: {
+                    load: DontCare,
+                    store: Store,
+                    format: Format::R16Sfloat,
+                    samples: 1,
+                }
+            },
+            pass: {
+                color: [color],
+                depth_stencil: {}
+            }
+        )
+        .unwrap(),
+    );
+     */
     let ao_render_pass = render_passes::basic(app.get_device());
+
     let (ao_vs_main, ao_fs_main) = ao_shaders.get_entry_points();
     let ao_pipeline = Arc::new(
         GraphicsPipeline::start()
@@ -93,16 +123,81 @@ fn main() {
             .build(app.get_device())
             .unwrap(),
     );
-    let pass2 = system::SimplePass {
-        images_created: vec!["ao_color"],
+    let ao_pass = system::SimplePass {
+        images_created: vec!["ao_raw"],
         images_needed: vec!["position", "normal", "ao_noise"],
         resources_needed: vec!["view_proj", "ao_samples", "dimensions"],
         render_pass: ao_render_pass,
         pipeline: ao_pipeline,
     };
 
-    let output_tag = "ao_color";
-    let passes: Vec<Box<dyn system::Pass>> = vec![Box::new(pass1), Box::new(pass2)];
+    /*
+    let blur_render_pass = Arc::new(
+        vulkano::single_pass_renderpass!(
+            app.get_device(),
+            attachments: {
+                color: {
+                    load: DontCare,
+                    store: Store,
+                    format: Format::R16Sfloat,
+                    samples: 1,
+                }
+            },
+            pass: {
+                color: [color],
+                depth_stencil: {}
+            }
+        )
+        .unwrap(),
+    );
+
+    let (blur_vs_main, blur_fs_main) = blur_shaders.get_entry_points();
+    let blur_pipeline = Arc::new(
+        GraphicsPipeline::start()
+            .vertex_input_single_buffer::<system::SimpleVertex>()
+            .vertex_shader(blur_vs_main, ())
+            .primitive_topology(PrimitiveTopology::TriangleStrip)
+            .viewports_dynamic_scissors_irrelevant(1)
+            .fragment_shader(blur_fs_main, ())
+            .render_pass(Subpass::from(blur_render_pass.clone(), 0).unwrap())
+            .build(app.get_device())
+            .unwrap(),
+    );
+    let blur_pass = system::SimplePass {
+        images_created: vec!["ao_blur"],
+        images_needed: vec!["ao_raw"],
+        resources_needed: vec![],
+        render_pass: blur_render_pass,
+        pipeline: blur_pipeline,
+    };
+
+    let final_render_pass = render_passes::basic(app.get_device());
+    let (final_vs_main, final_fs_main) = final_shaders.get_entry_points();
+    let final_pipeline = Arc::new(
+        GraphicsPipeline::start()
+            .vertex_input_single_buffer::<system::SimpleVertex>()
+            .vertex_shader(final_vs_main, ())
+            .primitive_topology(PrimitiveTopology::TriangleStrip)
+            .viewports_dynamic_scissors_irrelevant(1)
+            .fragment_shader(final_fs_main, ())
+            .render_pass(Subpass::from(final_render_pass.clone(), 0).unwrap())
+            .build(app.get_device())
+            .unwrap(),
+    );
+    let final_pass = system::SimplePass {
+        images_created: vec!["final_color"],
+        images_needed: vec!["ao_blur", "color"],
+        resources_needed: vec![],
+        render_pass: final_render_pass,
+        pipeline: final_pipeline,
+    };
+    */
+
+    // let output_tag = "final_color";
+    let output_tag = "ao_raw";
+    let passes: Vec<Box<dyn system::Pass>> =
+    // vec![Box::new(geo_pass), Box::new(ao_pass), Box::new(blur_pass), Box::new(final_pass)];
+    vec![Box::new(geo_pass), Box::new(ao_pass)];
     let system = system::System::new(app.get_queue(), passes, output_tag);
     app.set_system(system);
 
@@ -113,7 +208,8 @@ fn main() {
     let sample_p = Box::new(AOSampleProducer::new(app.get_device()));
     let noise_p = Box::new(AONoiseTexProducer::new(app.get_queue()));
     let dims_p = Box::new(DimensionsProducer::new());
-    let producer_collection = producer::ProducerCollection::new(vec![noise_p], vec![camera_p, sample_p, dims_p]);
+    let producer_collection =
+        producer::ProducerCollection::new(vec![noise_p], vec![camera_p, sample_p, dims_p]);
     app.set_producers(producer_collection);
 
     let mut world_com = app.get_world_com();
@@ -122,14 +218,7 @@ fn main() {
         .mesh(happy_mesh)
         .shaders(geo_shaders.clone())
         .build(app.get_device());
-    let cube_mesh = mesh_gen::create_vertices_for_cube([6.0, 0.0, 0.0], 4.0);
-    let cube = ObjectSpecBuilder::default()
-        .mesh(cube_mesh)
-        .shaders(geo_shaders)
-        .build(app.get_device());
     world_com.add_object_from_spec("happy", happy);
-
-    world_com.add_object_from_spec("cube", cube);
 
     while !app.done {
         let frame_info = app.get_frame_info();
@@ -162,8 +251,9 @@ impl AOSampleProducer {
         for x in 0..64 {
             let mut sample = vec3(
                 rand::random::<f32>() * 2.0 - 1.0,
-                rand::random::<f32>(),
                 rand::random::<f32>() * 2.0 - 1.0,
+                rand::random::<f32>() * 2.0 - 1.0,
+                // rand::random::<f32>(),
             );
             sample = normalize(&sample);
             sample *= rand::random::<f32>();
@@ -228,7 +318,7 @@ impl AONoiseTexProducer {
             Format::R32G32B32A32Sfloat,
             queue.clone(),
         )
-            .unwrap();
+        .unwrap();
 
         noise_tex_future
             .then_signal_fence_and_flush()
@@ -253,25 +343,33 @@ impl ImageProducer for AONoiseTexProducer {
 }
 
 struct DimensionsProducer {
-    dimensions: [u32; 2],
+    dimensions: DimensionsUniform,
 }
 
 #[allow(dead_code)]
+#[derive(Copy, Clone)]
 struct DimensionsUniform {
-    dimensions: [u32; 2],
+    x: u32,
+    y: u32,
 }
 
 impl DimensionsProducer {
     fn new() -> Self {
         Self {
-            dimensions: [0; 2],
+            dimensions: DimensionsUniform {
+                x: 0,
+                y: 0,
+            }
         }
     }
 }
 
 impl BufferProducer for DimensionsProducer {
     fn update(&mut self, frame_info: FrameInfo) {
-        self.dimensions = frame_info.dimensions;
+        self.dimensions = DimensionsUniform {
+            x: frame_info.dimensions[0],
+            y: frame_info.dimensions[1],
+        }
     }
 
     fn create_buffer(&self, device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync> {
@@ -280,9 +378,7 @@ impl BufferProducer for DimensionsProducer {
             vulkano::buffer::BufferUsage::all(),
         );
 
-        let uniform_data = DimensionsUniform {
-            dimensions: self.dimensions,
-        };
+        let uniform_data = self.dimensions;
 
         Arc::new(pool.next(uniform_data).unwrap())
     }
