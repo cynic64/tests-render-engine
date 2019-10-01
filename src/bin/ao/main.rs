@@ -85,6 +85,7 @@ fn main() {
 
     // create system
     let geo_pass = system::Pass::Complex {
+        name: "geometry",
         images_needed: vec![],
         images_created: vec!["position", "color", "normal", "depth"],
         buffers_needed: vec!["view_proj"],
@@ -126,6 +127,7 @@ fn main() {
             .unwrap(),
     );
     let ao_pass = system::Pass::Simple {
+        name: "ao",
         images_created: vec!["ao_raw"],
         images_needed: vec!["position", "normal", "ao_noise"],
         buffers_needed: vec!["view_proj", "ao_samples", "dimensions"],
