@@ -13,8 +13,8 @@ use vulkano::image::{Dimensions, ImmutableImage};
 use vulkano::pipeline::GraphicsPipeline;
 use vulkano::sync::GpuFuture;
 
-use std::path::PathBuf;
 use std::sync::Arc;
+use std::path::PathBuf;
 
 use nalgebra_glm::*;
 
@@ -66,8 +66,6 @@ fn main() {
     // load shaders for each pass
     let geo_vs_path = relative_path("shaders/ao_geo_vert.glsl");
     let geo_fs_path = relative_path("shaders/ao_geo_frag.glsl");
-    let geo_shaders =
-        shaders::ShaderSystem::load_from_file(app.get_device(), &geo_vs_path, &geo_fs_path);
 
     let deferred_vs_path = relative_path("shaders/ao_simple_vert.glsl");
     let ao_fs_path = relative_path("shaders/ao_ao_frag.glsl");
@@ -219,8 +217,8 @@ fn main() {
 
     let happy = ObjectSpecBuilder::default()
         .mesh(happy_mesh)
-        .shaders(geo_shaders.clone())
-        .build(app.get_device());
+        .shaders(geo_vs_path, geo_fs_path)
+        .build();
     world_com.add_object_from_spec("happy", happy);
 
     while !app.done {
@@ -233,10 +231,6 @@ fn main() {
     }
 
     app.print_fps();
-}
-
-fn relative_path(local_path: &str) -> PathBuf {
-    [env!("CARGO_MANIFEST_DIR"), local_path].iter().collect()
 }
 
 struct AOSampleProducer {
@@ -386,4 +380,8 @@ impl BufferProducer for DimensionsProducer {
     fn name(&self) -> &str {
         "dimensions"
     }
+}
+
+pub fn relative_path(local_path: &str) -> PathBuf {
+    [env!("CARGO_MANIFEST_DIR"), local_path].iter().collect()
 }

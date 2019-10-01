@@ -16,7 +16,7 @@ pub fn main() {
 
     let dragon = ObjectSpecBuilder::default()
         .mesh(dragon_mesh)
-        .build(app.get_device());
+        .build();
     world_com.add_object_from_spec("dragon", dragon);
 
     // change camera to one with a farther orbit distance
