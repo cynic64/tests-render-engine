@@ -18,6 +18,8 @@ use std::sync::Arc;
 
 use nalgebra_glm::*;
 
+// TODO: perf regression tests for all of these
+
 fn main() {
     let path = relative_path("meshes/dragon.obj");
     let happy_mesh = mesh_gen::load_obj(&path).unwrap();
@@ -85,7 +87,7 @@ fn main() {
     let geo_pass = system::Pass::Complex {
         images_needed: vec![],
         images_created: vec!["position", "color", "normal", "depth"],
-        resources_needed: vec!["view_proj"],
+        buffers_needed: vec!["view_proj"],
         render_pass: geo_render_pass,
     };
 
@@ -126,7 +128,7 @@ fn main() {
     let ao_pass = system::Pass::Simple {
         images_created: vec!["ao_raw"],
         images_needed: vec!["position", "normal", "ao_noise"],
-        resources_needed: vec!["view_proj", "ao_samples", "dimensions"],
+        buffers_needed: vec!["view_proj", "ao_samples", "dimensions"],
         render_pass: ao_render_pass,
         pipeline: ao_pipeline,
     };
