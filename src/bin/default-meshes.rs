@@ -1,9 +1,9 @@
 use render_engine as re;
 
-use re::world::{PrimitiveTopology, ObjectSpecBuilder};
-use re::producer::ProducerCollection;
-use re::mesh_gen;
 use re::camera::OrbitCamera;
+use re::mesh_gen;
+use re::producer::ProducerCollection;
+use re::world::{ObjectSpecBuilder, PrimitiveTopology};
 use re::App;
 
 pub fn main() {

@@ -1,7 +1,7 @@
 use render_engine as re;
 
-use re::App;
 use re::world::ObjectSpecBuilder;
+use re::App;
 
 pub fn main() {
     let mut app = App::new();

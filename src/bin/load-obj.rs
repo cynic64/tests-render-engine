@@ -1,9 +1,9 @@
 use render_engine as re;
 
-use re::{App, mesh_gen, OrbitCamera};
-use re::world::ObjectSpecBuilder;
-use re::producer::ProducerCollection;
 use re::input::VirtualKeyCode;
+use re::producer::ProducerCollection;
+use re::world::ObjectSpecBuilder;
+use re::{mesh_gen, App, OrbitCamera};
 
 use std::path::PathBuf;
 

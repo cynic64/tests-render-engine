@@ -82,7 +82,7 @@ fn main() {
         shaders::ShaderSystem::load_from_file(app.get_device(), &deferred_vs_path, &final_fs_path);
 
     // create system
-    let geo_pass = system::ComplexPass {
+    let geo_pass = system::Pass::Complex {
         images_needed: vec![],
         images_created: vec!["position", "color", "normal", "depth"],
         resources_needed: vec!["view_proj"],
@@ -123,7 +123,7 @@ fn main() {
             .build(app.get_device())
             .unwrap(),
     );
-    let ao_pass = system::SimplePass {
+    let ao_pass = system::Pass::Simple {
         images_created: vec!["ao_raw"],
         images_needed: vec!["position", "normal", "ao_noise"],
         resources_needed: vec!["view_proj", "ao_samples", "dimensions"],
@@ -195,9 +195,8 @@ fn main() {
 
     // let output_tag = "final_color";
     let output_tag = "ao_raw";
-    let passes: Vec<Box<dyn system::Pass>> =
+    let passes: Vec<system::Pass> = vec![geo_pass, ao_pass];
     // vec![Box::new(geo_pass), Box::new(ao_pass), Box::new(blur_pass), Box::new(final_pass)];
-    vec![Box::new(geo_pass), Box::new(ao_pass)];
     let system = system::System::new(app.get_queue(), passes, output_tag);
     app.set_system(system);
 
@@ -356,10 +355,7 @@ struct DimensionsUniform {
 impl DimensionsProducer {
     fn new() -> Self {
         Self {
-            dimensions: DimensionsUniform {
-                x: 0,
-                y: 0,
-            }
+            dimensions: DimensionsUniform { x: 0, y: 0 },
         }
     }
 }
