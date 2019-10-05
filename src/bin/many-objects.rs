@@ -14,14 +14,14 @@ pub fn main() {
     // create vertices and object specs
     let mut world_com = app.get_world_com();
     let mut rng = rand::thread_rng();
-    for i in 0..10_000 {
+    for i in 0..1_000 {
         let x = 1.0 / (rng.gen::<f32>() * 2.0 - 1.0);
         let y = 1.0 / (rng.gen::<f32>() * 2.0 - 1.0);
         let z = 1.0 / (rng.gen::<f32>() * 2.0 - 1.0);
         let mesh = mesh_gen::create_vertices_for_cube([x, y, z], 0.2);
         let spec = ObjectSpecBuilder::default()
             .mesh(mesh)
-            .build(app.get_device());
+            .build();
 
         world_com.add_object_from_spec(&i.to_string(), spec);
     }

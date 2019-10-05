@@ -16,14 +16,14 @@ pub fn main() {
 
     let spec_cube_1 = ObjectSpecBuilder::default()
         .mesh(verts_cube_1)
-        .build(app.get_device());
+        .build();
     let spec_cube_2 = ObjectSpecBuilder::default()
         .mesh(verts_cube_2)
-        .build(app.get_device());
+        .build();
     let spec_cube_edges = ObjectSpecBuilder::default()
         .mesh(verts_cube_edges)
         .fill_type(PrimitiveTopology::LineList)
-        .build(app.get_device());
+        .build();
 
     let mut world_com = app.get_world_com();
     world_com.add_object_from_spec("cube 1", spec_cube_1);
