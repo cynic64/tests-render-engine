@@ -3,15 +3,15 @@
 use render_engine::input::{FrameInfo, VirtualKeyCode};
 use render_engine::producer::{BufferProducer, ImageProducer};
 use render_engine::*;
+use render_engine::pipeline_cache::PipelineSpec;
 
 use vulkano::buffer::BufferAccess;
 use vulkano::device::{Device, Queue};
 use vulkano::format::Format;
-use vulkano::framebuffer::Subpass;
 use vulkano::image::traits::ImageViewAccess;
 use vulkano::image::{Dimensions, ImmutableImage};
-use vulkano::pipeline::GraphicsPipeline;
 use vulkano::sync::GpuFuture;
+use vulkano::pipeline::input_assembly::PrimitiveTopology;
 
 use std::sync::Arc;
 use std::path::PathBuf;
@@ -63,24 +63,6 @@ fn main() {
         .unwrap(),
     );
 
-    // load shaders for each pass
-    let geo_vs_path = relative_path("shaders/ao_geo_vert.glsl");
-    let geo_fs_path = relative_path("shaders/ao_geo_frag.glsl");
-
-    let deferred_vs_path = relative_path("shaders/ao_simple_vert.glsl");
-    let ao_fs_path = relative_path("shaders/ao_ao_frag.glsl");
-    let ao_shaders =
-        shaders::ShaderSystem::load_from_file(app.get_device(), &deferred_vs_path, &ao_fs_path);;
-
-    let blur_fs_path = relative_path("shaders/ao_blur_frag.glsl");
-    let blur_shaders =
-        shaders::ShaderSystem::load_from_file(app.get_device(), &deferred_vs_path, &blur_fs_path);
-
-    // TODO: don't load deferred shader twice
-    let final_fs_path = relative_path("shaders/ao_final_frag.glsl");
-    let final_shaders =
-        shaders::ShaderSystem::load_from_file(app.get_device(), &deferred_vs_path, &final_fs_path);
-
     // create system
     let geo_pass = system::Pass::Complex {
         name: "geometry",
@@ -90,115 +72,26 @@ fn main() {
         render_pass: geo_render_pass,
     };
 
-    /*
-    let ao_render_pass = Arc::new(
-        vulkano::single_pass_renderpass!(
-            app.get_device(),
-            attachments: {
-                color: {
-                    load: DontCare,
-                    store: Store,
-                    format: Format::R16Sfloat,
-                    samples: 1,
-                }
-            },
-            pass: {
-                color: [color],
-                depth_stencil: {}
-            }
-        )
-        .unwrap(),
-    );
-     */
     let ao_render_pass = render_passes::basic(app.get_device());
 
-    let (ao_vs_main, ao_fs_main) = ao_shaders.get_entry_points();
-    let ao_pipeline = Arc::new(
-        GraphicsPipeline::start()
-            .vertex_input_single_buffer::<system::SimpleVertex>()
-            .vertex_shader(ao_vs_main, ())
-            .primitive_topology(PrimitiveTopology::TriangleStrip)
-            .viewports_dynamic_scissors_irrelevant(1)
-            .fragment_shader(ao_fs_main, ())
-            .render_pass(Subpass::from(ao_render_pass.clone(), 0).unwrap())
-            .build(app.get_device())
-            .unwrap(),
-    );
+    let ao_pipe_spec = PipelineSpec {
+        vs_path: relative_path("shaders/ao_simple_vert.glsl"),
+        fs_path: relative_path("shaders/ao_ao_frag.glsl"),
+        fill_type: PrimitiveTopology::TriangleStrip,
+        depth: false,
+    };
+
     let ao_pass = system::Pass::Simple {
         name: "ao",
         images_created: vec!["ao_raw"],
         images_needed: vec!["position", "normal", "ao_noise"],
         buffers_needed: vec!["view_proj", "ao_samples", "dimensions"],
         render_pass: ao_render_pass,
-        pipeline: ao_pipeline,
+        pipeline_spec: ao_pipe_spec,
     };
 
-    /*
-    let blur_render_pass = Arc::new(
-        vulkano::single_pass_renderpass!(
-            app.get_device(),
-            attachments: {
-                color: {
-                    load: DontCare,
-                    store: Store,
-                    format: Format::R16Sfloat,
-                    samples: 1,
-                }
-            },
-            pass: {
-                color: [color],
-                depth_stencil: {}
-            }
-        )
-        .unwrap(),
-    );
-
-    let (blur_vs_main, blur_fs_main) = blur_shaders.get_entry_points();
-    let blur_pipeline = Arc::new(
-        GraphicsPipeline::start()
-            .vertex_input_single_buffer::<system::SimpleVertex>()
-            .vertex_shader(blur_vs_main, ())
-            .primitive_topology(PrimitiveTopology::TriangleStrip)
-            .viewports_dynamic_scissors_irrelevant(1)
-            .fragment_shader(blur_fs_main, ())
-            .render_pass(Subpass::from(blur_render_pass.clone(), 0).unwrap())
-            .build(app.get_device())
-            .unwrap(),
-    );
-    let blur_pass = system::SimplePass {
-        images_created: vec!["ao_blur"],
-        images_needed: vec!["ao_raw"],
-        resources_needed: vec![],
-        render_pass: blur_render_pass,
-        pipeline: blur_pipeline,
-    };
-
-    let final_render_pass = render_passes::basic(app.get_device());
-    let (final_vs_main, final_fs_main) = final_shaders.get_entry_points();
-    let final_pipeline = Arc::new(
-        GraphicsPipeline::start()
-            .vertex_input_single_buffer::<system::SimpleVertex>()
-            .vertex_shader(final_vs_main, ())
-            .primitive_topology(PrimitiveTopology::TriangleStrip)
-            .viewports_dynamic_scissors_irrelevant(1)
-            .fragment_shader(final_fs_main, ())
-            .render_pass(Subpass::from(final_render_pass.clone(), 0).unwrap())
-            .build(app.get_device())
-            .unwrap(),
-    );
-    let final_pass = system::SimplePass {
-        images_created: vec!["final_color"],
-        images_needed: vec!["ao_blur", "color"],
-        resources_needed: vec![],
-        render_pass: final_render_pass,
-        pipeline: final_pipeline,
-    };
-    */
-
-    // let output_tag = "final_color";
     let output_tag = "ao_raw";
     let passes: Vec<system::Pass> = vec![geo_pass, ao_pass];
-    // vec![Box::new(geo_pass), Box::new(ao_pass), Box::new(blur_pass), Box::new(final_pass)];
     let system = system::System::new(app.get_queue(), passes, output_tag);
     app.set_system(system);
 
@@ -217,7 +110,10 @@ fn main() {
 
     let happy = ObjectSpecBuilder::default()
         .mesh(happy_mesh)
-        .shaders(geo_vs_path, geo_fs_path)
+        .shaders(
+            relative_path("shaders/ao_geo_vert.glsl"),
+            relative_path("shaders/ao_geo_frag.glsl"),
+        )
         .build();
     world_com.add_object_from_spec("happy", happy);
 
