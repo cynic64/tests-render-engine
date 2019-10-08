@@ -14,7 +14,6 @@ layout(set = 1, binding = 0) uniform Model {
 } model;
 
 void main() {
-    mat4 modelview = view_proj.view * model.model;
-    gl_Position = view_proj.proj * modelview * vec4(position, 1.0);
+    gl_Position = view_proj.proj * view_proj.view * model.model * vec4(position, 1.0);
     v_normal = normal;
 }
