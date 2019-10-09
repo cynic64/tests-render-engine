@@ -77,6 +77,8 @@ fn buffer_for_matrix(device: Arc<Device>, data: Matrix) -> Arc<dyn BufferAccess 
 
 fn create_light_info(device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync> {
     let data = LightInfo {
+        light_power: 5.0,
+        light_pos: LIGHT_POS,
         light_color: [1.0, 1.0, 1.0],
         object_color: [1.0, 0.5, 0.31],
     };
@@ -94,6 +96,8 @@ fn relative_path(local_path: &str) -> PathBuf {
 }
 
 struct LightInfo {
+    light_power: f32,
+    light_pos: [f32; 3],
     light_color: [f32; 3],
     object_color: [f32; 3],
 }

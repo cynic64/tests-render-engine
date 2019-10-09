@@ -45,6 +45,11 @@ pub fn main() {
     app.set_producers(producers);
 
     while !app.done {
+        let frame_info = app.get_frame_info();
+        if frame_info.keydowns.contains(&VirtualKeyCode::Escape) {
+            break;
+        }
+
         app.draw_frame();
     }
 
