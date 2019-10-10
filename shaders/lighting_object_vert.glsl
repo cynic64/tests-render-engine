@@ -9,6 +9,7 @@ layout(location = 1) out vec3 v_normal;
 layout(set = 0, binding = 0) uniform ViewProj {
     mat4 view;
     mat4 proj;
+    vec3 pos;
 } view_proj;
 
 layout(set = 1, binding = 0) uniform Model {

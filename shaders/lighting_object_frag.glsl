@@ -5,6 +5,12 @@ layout(location = 1) in vec3 v_normal;
 
 layout(location = 0) out vec4 f_color;
 
+layout(set = 0, binding = 0) uniform ViewProj {
+    mat4 view;
+    mat4 proj;
+    vec3 pos;
+} camera;
+
 // for some reason including this is necessary to make the
 // second uniform work. what the hell, GLSL.
 layout(set = 1, binding = 0) uniform Model {
@@ -35,7 +41,15 @@ void main() {
     float diff = max(dot(v_normal, light_dir), 0.0);
     vec3 diffuse = diff * light_color;
 
-    vec3 result = (ambient + diffuse) * object_color;
+    // specular
+    float specular_strength = 0.5;
+    vec3 view_dir = normalize(camera.pos - v_pos);
+    vec3 reflect_dir = reflect(-light_dir, norm);
+    float spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32);
+    vec3 specular = specular_strength * spec * light_color;
+
+    // result
+    vec3 result = (ambient + diffuse + specular) * object_color;
 
     f_color = vec4(result, 1.0);
 }
