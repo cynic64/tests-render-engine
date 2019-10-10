@@ -12,7 +12,7 @@ use nalgebra_glm as glm;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-const LIGHT_POS: [f32; 3] = [10.0, 2.0, 5.0];
+const LIGHT_POS: [f32; 4] = [10.0, 2.0, 5.0, 1.0];
 
 fn main() {
     // paths and loading meshes
@@ -77,10 +77,10 @@ fn buffer_for_matrix(device: Arc<Device>, data: Matrix) -> Arc<dyn BufferAccess 
 
 fn create_light_info(device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync> {
     let data = LightInfo {
-        light_power: 5.0,
         light_pos: LIGHT_POS,
-        light_color: [1.0, 1.0, 1.0],
-        object_color: [1.0, 0.5, 0.31],
+        light_color: [1.0, 1.0, 1.0, 1.0],
+        object_color: [1.0, 0.5, 0.31, 1.0],
+        final_color: [1.0, 0.0, 1.0, 1.0],
     };
 
     let pool = vulkano::buffer::cpu_pool::CpuBufferPool::<LightInfo>::new(
@@ -95,11 +95,12 @@ fn relative_path(local_path: &str) -> PathBuf {
     [env!("CARGO_MANIFEST_DIR"), local_path].iter().collect()
 }
 
+#[allow(dead_code)]
 struct LightInfo {
-    light_power: f32,
-    light_pos: [f32; 3],
-    light_color: [f32; 3],
-    object_color: [f32; 3],
+    light_pos: [f32; 4],
+    light_color: [f32; 4],
+    object_color: [f32; 4],
+    final_color: [f32; 4],
 }
 
 type Matrix = [[f32; 4]; 4];
