@@ -5,37 +5,50 @@ layout(location = 1) in vec3 v_normal;
 
 layout(location = 0) out vec4 f_color;
 
-// for some reason including this is necessary to make the
-// second uniform work. what the hell, GLSL.
+layout(set = 0, binding = 0) uniform ViewProj {
+    mat4 view;
+    mat4 proj;
+    vec3 pos;
+} camera;
+
+layout(set = 0, binding = 1) uniform LightInfo {
+    vec3 position;
+    vec3 ambient;
+    vec3 diffuse;
+    vec3 specular;
+} light;
+
 layout(set = 1, binding = 0) uniform Model {
     mat4 model;
 } model;
 
-// AND FOR SOME REASON I CAN'T USE VEC3??
-// that might be vulkano's fault though
-layout(set = 1, binding = 1) uniform LightInfo {
-    vec4 l_pos;
-    vec4 l_color;
-    vec4 o_color;
-} light_info;
+layout(set = 1, binding = 1) uniform Material {
+    vec3 ambient;
+    vec3 diffuse;
+    vec3 specular;
+    vec3 shininess;
+} material;
 
 void main() {
-    vec3 light_pos = light_info.l_pos.xyz;
-    vec3 light_color = light_info.l_color.xyz;
-    vec3 object_color = light_info.o_color.xyz;
-
     // ambient
-    float ambient_strength = 0.1;
-    vec3 ambient = ambient_strength * light_color;
+    vec3 ambient = material.ambient * light.ambient;
 
     // diffuse
     vec3 norm = normalize(v_normal);
-    vec3 light_dir = normalize(light_pos - v_pos);
+    vec3 light_dir = normalize(light.position - v_pos);
 
     float diff = max(dot(v_normal, light_dir), 0.0);
-    vec3 diffuse = diff * light_color;
+    vec3 diffuse = light.diffuse * (diff * material.diffuse);
 
-    vec3 result = (ambient + diffuse) * object_color;
+    // specular
+    float specular_strength = 0.5;
+    vec3 view_dir = normalize(camera.pos - v_pos);
+    vec3 reflect_dir = reflect(-light_dir, norm);
+    float spec = pow(max(dot(view_dir, reflect_dir), 0.0), material.shininess.x);
+    vec3 specular = light.specular * (spec * material.specular);
+
+    // result
+    vec3 result = ambient + diffuse + specular;
 
     f_color = vec4(result, 1.0);
 }
