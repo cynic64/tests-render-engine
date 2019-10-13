@@ -317,6 +317,7 @@ impl BufferProducer for Camera {
 
         let dims = frame_info.dimensions;
         let aspect_ratio = (dims[0] as f32) / (dims[1] as f32);
+
         // TODO: i don't get why i need to flip this upside down
         self.proj_mat = scale(
             &perspective(

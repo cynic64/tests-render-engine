@@ -47,8 +47,15 @@ void main() {
     float spec = pow(max(dot(view_dir, reflect_dir), 0.0), material.shininess.x);
     vec3 specular = light.specular * (spec * material.specular);
 
+    // specular
+    float specular_strength = 0.5;
+    vec3 view_dir = normalize(camera.pos - v_pos);
+    vec3 reflect_dir = reflect(-light_dir, norm);
+    float spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32);
+    vec3 specular = specular_strength * spec * light_color;
+
     // result
-    vec3 result = ambient + diffuse + specular;
+    vec3 result = (ambient + diffuse + specular) * object_color;
 
     f_color = vec4(result, 1.0);
 }
