@@ -15,6 +15,7 @@ vulkano-win = "0.14"
 winit = "0.19"
 rand = "0.7.2"
 tobj = "0.1.11"
+image = "0.22.3"
 
 [profile.release]
 debug = true

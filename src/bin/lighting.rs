@@ -1,14 +1,20 @@
 use render_engine as re;
 
 use re::input::{get_elapsed, FrameInfo, VirtualKeyCode};
-use re::producer::{BufferProducer, ProducerCollection};
+use re::producer::{BufferProducer, ImageProducer, ProducerCollection};
 use re::render_passes;
 use re::system::{Pass, System, Vertex};
 use re::world::{Mesh, ObjectSpecBuilder};
 use re::{mesh_gen, App};
 
 use vulkano::buffer::BufferAccess;
-use vulkano::device::Device;
+use vulkano::device::{Device, Queue};
+use vulkano::format::Format;
+use vulkano::image::traits::ImageViewAccess;
+use vulkano::image::{Dimensions, ImmutableImage};
+use vulkano::sync::GpuFuture;
+
+use image::ImageFormat;
 
 use nalgebra_glm as glm;
 
@@ -32,9 +38,9 @@ const BRASS: Material = Material {
 
 fn main() {
     // paths and loading meshes
-    let dragon_path = relative_path("meshes/dragon.obj");
-    let dragon_mesh = mesh_gen::load_obj(&dragon_path).unwrap();
-    let dragon_mesh = load_obj(&dragon_path);
+    let raptor_path = relative_path("meshes/raptor.obj");
+    // let raptor_mesh = mesh_gen::load_obj(&raptor_path).unwrap();
+    let raptor_mesh = load_obj(&raptor_path);
 
     let happy_path = relative_path("meshes/happy.obj");
     let happy_mesh = mesh_gen::load_obj(&happy_path).unwrap();
@@ -47,8 +53,12 @@ fn main() {
     let mut app = App::new();
     let mut world_com = app.get_world_com();
 
+    // load texture
+    let texture_p = TextureProducer::new(app.get_queue());
+
     // creating buffers
-    let dragon_matrix: Matrix = glm::Mat4::identity().into();
+    let raptor_matrix: Matrix =
+        glm::scale(&glm::Mat4::identity(), &glm::vec3(0.8, 0.8, 0.8)).into();
     let happy_matrix: Matrix = glm::translate(
         &glm::rotate(
             &glm::scale(&glm::Mat4::identity(), &glm::vec3(1.0, 0.5, 1.0)),
@@ -58,43 +68,46 @@ fn main() {
         &glm::vec3(0.0, 20.0, 3.0),
     )
     .into();
-    let dragon_matrix_buffer = bufferize(app.get_device(), dragon_matrix);
+    let raptor_matrix_buffer = bufferize(app.get_device(), raptor_matrix);
     let happy_matrix_buffer = bufferize(app.get_device(), happy_matrix);
 
-    let dragon_material_buffer = bufferize(app.get_device(), EMERALD);
+    let raptor_material_buffer = bufferize(app.get_device(), EMERALD);
     let happy_material_buffer = bufferize(app.get_device(), BRASS);
 
     // adding objects
-    let dragon_spec = ObjectSpecBuilder::default()
-        .mesh(dragon_mesh)
+    let raptor_spec = ObjectSpecBuilder::default()
+        .mesh(raptor_mesh)
         .shaders(vs_path.clone(), object_fs_path.clone())
-        .additional_resources(vec![dragon_matrix_buffer, dragon_material_buffer.clone()])
+        .additional_resources(vec![raptor_matrix_buffer, raptor_material_buffer.clone()])
         .build();
     let happy_spec = ObjectSpecBuilder::default()
         .mesh(happy_mesh)
         .shaders(vs_path.clone(), object_fs_path.clone())
         .additional_resources(vec![happy_matrix_buffer, happy_material_buffer])
         .build();
-    world_com.add_object_from_spec("dragon", dragon_spec);
+    world_com.add_object_from_spec("raptor", raptor_spec);
     world_com.add_object_from_spec("happy", happy_spec);
 
     // change camera to one with a farther orbit distance
     let camera = Camera::default();
     let (light_info_p, light_pos_recv) = LightInfoProducer::new();
-    let producers = ProducerCollection::new(vec![], vec![Box::new(camera), Box::new(light_info_p)]);
+    let producers = ProducerCollection::new(
+        vec![Box::new(texture_p)],
+        vec![Box::new(camera), Box::new(light_info_p)],
+    );
     app.set_producers(producers);
 
     // change system to include light info
     let system = {
         let pass = Pass::Complex {
             name: "geometry",
-            images_needed: vec![],
-            images_created: vec!["color", "depth"],
+            images_needed: vec!["erato"],
+            images_created: vec!["resolve_color", "multisampled_color", "multisampled_depth", "resolve_depth"],
             buffers_needed: vec!["view_proj", "light_info"],
-            render_pass: render_passes::with_depth(app.get_device()),
+            render_pass: render_passes::multisampled_with_depth(app.get_device(), 4),
         };
 
-        let output_tag = "color";
+        let output_tag = "resolve_color";
         System::new(app.get_queue(), vec![pass], output_tag)
     };
     app.set_system(system);
@@ -120,7 +133,7 @@ fn main() {
         let light_matrix_buffer = bufferize(app.get_device(), light_matrix);
         let light_spec = ObjectSpecBuilder::default()
             .shaders(vs_path.clone(), light_fs_path.clone())
-            .additional_resources(vec![light_matrix_buffer, dragon_material_buffer.clone()])
+            .additional_resources(vec![light_matrix_buffer, raptor_material_buffer.clone()])
             .build();
         world_com.add_object_from_spec("light", light_spec);
 
@@ -170,9 +183,9 @@ impl LightInfoProducer {
 
         let light_info = LightInfo {
             position: [0.0, 0.0, 0.0, 0.0],
-            ambient: [0.2, 0.2, 0.2, 0.0],
-            diffuse: [0.5, 0.5, 0.5, 0.0],
-            specular: [1.0, 1.0, 1.0, 0.0],
+            ambient: [0.4, 0.4, 0.4, 0.0],
+            diffuse: [1.5, 1.5, 1.5, 0.0],
+            specular: [2.0, 2.0, 2.0, 0.0],
         };
 
         let light_info_p = Self {
@@ -188,7 +201,7 @@ impl LightInfoProducer {
 
 impl BufferProducer for LightInfoProducer {
     fn create_buffer(&self, device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync> {
-        let time = get_elapsed(self.start_time);
+        let time = get_elapsed(self.start_time) / 4.0;
         let x = time.sin() * self.orbit_distance;
         let z = time.cos() * self.orbit_distance;
         let pos = [x, 0.0, z];
@@ -371,11 +384,21 @@ fn load_obj(path: &Path) -> Mesh {
     let mut vertices: Vec<Vertex> = vec![];
 
     for i in 0..mesh.positions.len() / 3 {
-        let pos = [mesh.positions[i * 3], mesh.positions[i * 3 + 1], mesh.positions[i * 3 + 2]];
-        let normal = [mesh.normals[i * 3], mesh.normals[i * 3 + 1], mesh.normals[i * 3 + 2]];
+        let pos = [
+            mesh.positions[i * 3],
+            mesh.positions[i * 3 + 1],
+            mesh.positions[i * 3 + 2],
+        ];
+        let normal = [
+            mesh.normals[i * 3],
+            mesh.normals[i * 3 + 1],
+            mesh.normals[i * 3 + 2],
+        ];
+        let tex_coord = [mesh.texcoords[i * 2], mesh.texcoords[i * 2 + 1] * -1.0];
         let vertex = Vertex {
             position: pos,
             normal,
+            tex_coord,
         };
 
         vertices.push(vertex);
@@ -384,5 +407,52 @@ fn load_obj(path: &Path) -> Mesh {
     Mesh {
         vertices: Box::new(vertices),
         indices: mesh.indices.clone(),
+    }
+}
+
+struct TextureProducer {
+    image: Arc<dyn ImageViewAccess + Send + Sync>,
+}
+
+impl TextureProducer {
+    fn new(queue: Arc<Queue>) -> Self {
+        let (texture, tex_future) = {
+            let image = image::load_from_memory_with_format(
+                include_bytes!("raptor-brighter.png"),
+                ImageFormat::PNG,
+            )
+            .unwrap()
+            .to_rgba();
+            let image_data = image.into_raw().clone();
+
+            ImmutableImage::from_iter(
+                image_data.iter().cloned(),
+                Dimensions::Dim2d {
+                    width: 1024,
+                    height: 1024,
+                },
+                Format::R8G8B8A8Srgb,
+                queue.clone(),
+            )
+            .unwrap()
+        };
+
+        tex_future
+            .then_signal_fence_and_flush()
+            .unwrap()
+            .wait(None)
+            .unwrap();
+
+        Self { image: texture }
+    }
+}
+
+impl ImageProducer for TextureProducer {
+    fn create_image(&self, _device: Arc<Device>) -> Arc<dyn ImageViewAccess + Send + Sync> {
+        self.image.clone()
+    }
+
+    fn name(&self) -> &str {
+        "erato"
     }
 }
