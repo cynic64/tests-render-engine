@@ -144,9 +144,8 @@ impl AOSampleProducer {
         for x in 0..64 {
             let mut sample = vec3(
                 rand::random::<f32>() * 2.0 - 1.0,
+                rand::random::<f32>(),
                 rand::random::<f32>() * 2.0 - 1.0,
-                rand::random::<f32>() * 2.0 - 1.0,
-                // rand::random::<f32>(),
             );
             sample = normalize(&sample);
             sample *= rand::random::<f32>();
@@ -196,7 +195,7 @@ impl AONoiseTexProducer {
                 [
                     rand::random::<f32>() * 2.0 - 1.0,
                     rand::random::<f32>() * 2.0 - 1.0,
-                    0.0,
+                    rand::random::<f32>(),
                     0.0,
                 ]
             })
