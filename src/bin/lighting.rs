@@ -39,7 +39,6 @@ const BRASS: Material = Material {
 fn main() {
     // paths and loading meshes
     let raptor_path = relative_path("meshes/raptor.obj");
-    // let raptor_mesh = mesh_gen::load_obj(&raptor_path).unwrap();
     let raptor_mesh = load_obj(&raptor_path);
 
     let happy_path = relative_path("meshes/happy.obj");
