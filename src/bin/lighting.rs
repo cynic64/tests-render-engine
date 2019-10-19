@@ -1,457 +1,152 @@
 use render_engine as re;
 
-use re::input::{get_elapsed, FrameInfo, VirtualKeyCode};
-use re::producer::{BufferProducer, ImageProducer, ProducerCollection};
+/*
+Annoyances:
+Why do I have to manage queue and device? :(
+*/
+
+use re::input::get_elapsed;
 use re::render_passes;
-use re::system::{Pass, System, Vertex};
-use re::world::{Mesh, ObjectSpecBuilder};
-use re::{mesh_gen, App};
+use re::system::{Pass, System};
+use re::utils::{bufferize_data, ObjectSpec, load_texture};
+use re::window::Window;
 
-use vulkano::buffer::BufferAccess;
-use vulkano::device::{Device, Queue};
-use vulkano::format::Format;
-use vulkano::image::traits::ImageViewAccess;
-use vulkano::image::{Dimensions, ImmutableImage};
-use vulkano::sync::GpuFuture;
+// TODO: reeeeee i shouldn't have to do this
+use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
+use nalgebra_glm::*;
 
-use image::ImageFormat;
-
-use nalgebra_glm as glm;
-
-use std::path::{Path, PathBuf};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::collections::HashMap;
 use std::sync::Arc;
 
-const EMERALD: Material = Material {
-    ambient: [0.0215, 0.1745, 0.0215, 0.0],
-    diffuse: [0.07568, 0.61424, 0.07568, 0.0],
-    specular: [0.633, 0.727811, 0.633, 0.0],
-    shininess: 76.8,
-};
-
-const BRASS: Material = Material {
-    ambient: [0.329412, 0.223529, 0.027451, 0.0],
-    diffuse: [0.780392, 0.568627, 0.113725, 0.0],
-    specular: [0.992157, 0.941176, 0.807843, 0.0],
-    shininess: 26.88,
-};
+use tests_render_engine::{default_sampler, load_obj, relative_path, OrbitCamera};
 
 fn main() {
-    // paths and loading meshes
-    let raptor_path = relative_path("meshes/raptor.obj");
-    let raptor_mesh = load_obj(&raptor_path);
+    // initialize window
+    let (mut window, queue) = Window::new();
+    let device = queue.device().clone();
 
-    let happy_path = relative_path("meshes/happy.obj");
-    let happy_mesh = mesh_gen::load_obj(&happy_path).unwrap();
+    // create system
+    let render_pass = render_passes::with_depth(device.clone());
+    let mut system = System::new(
+        queue.clone(),
+        vec![Pass {
+            name: "geometry",
+            images_created_tags: vec!["color", "depth"],
+            images_needed_tags: vec![],
+            render_pass: render_pass.clone(),
+        }],
+        "color",
+    );
 
-    let vs_path = relative_path("shaders/lighting_object_vert.glsl");
-    let object_fs_path = relative_path("shaders/lighting_object_frag.glsl");
-    let light_fs_path = relative_path("shaders/lighting_light_frag.glsl");
+    window.set_render_pass(render_pass);
 
-    // app init
-    let mut app = App::new();
-    let mut world_com = app.get_world_com();
+    // create buffers for model matrix, light and materials
+    let model_data: [[f32; 4]; 4] = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
+    let model_buffer = bufferize_data(queue.clone(), model_data);
+
+    let mut light = Light {
+        position: [10.0, 0.0, 0.0, 0.0],
+        ambient: [0.8, 0.8, 0.8, 0.0],
+        diffuse: [2.5, 2.5, 2.5, 0.0],
+        specular: [3.0, 3.0, 3.0, 0.0],
+    };
+
+    // TODO: implement Copy for queue?
+    let material_buffer = bufferize_data(
+        queue.clone(),
+        Material {
+            shininess: 76.8,
+        },
+    );
 
     // load texture
-    let texture_p = TextureProducer::new(app.get_queue());
+    let diffuse_texture = load_texture(queue.clone(), &relative_path("textures/raptor-diffuse.png"));
+    let specular_texture = load_texture(queue.clone(), &relative_path("textures/raptor-specular.png"));
+    let normal_texture = load_texture(queue.clone(), &relative_path("textures/raptor-normal.png"));
 
-    // creating buffers
-    let raptor_matrix: Matrix =
-        glm::scale(&glm::Mat4::identity(), &glm::vec3(0.8, 0.8, 0.8)).into();
-    let happy_matrix: Matrix = glm::translate(
-        &glm::rotate(
-            &glm::scale(&glm::Mat4::identity(), &glm::vec3(1.0, 0.5, 1.0)),
-            std::f32::consts::PI / 2.0,
-            &glm::vec3(1.0, 1.0, 1.0),
-        ),
-        &glm::vec3(0.0, 20.0, 3.0),
-    )
-    .into();
-    let raptor_matrix_buffer = bufferize(app.get_device(), raptor_matrix);
-    let happy_matrix_buffer = bufferize(app.get_device(), happy_matrix);
+    // initialize camera
+    let mut camera = OrbitCamera::default();
 
-    let raptor_material_buffer = bufferize(app.get_device(), EMERALD);
-    let happy_material_buffer = bufferize(app.get_device(), BRASS);
+    // load mesh and create object
+    let mesh = load_obj(&relative_path("meshes/raptor.obj"));
+    let mut object = ObjectSpec {
+        vs_path: relative_path("shaders/lighting/object_vert.glsl"),
+        fs_path: relative_path("shaders/lighting/object_frag.glsl"),
+        mesh,
+        depth_buffer: true,
+        ..Default::default()
+    }
+    .build(queue.clone());
 
-    // adding objects
-    let raptor_spec = ObjectSpecBuilder::default()
-        .mesh(raptor_mesh)
-        .shaders(vs_path.clone(), object_fs_path.clone())
-        .additional_resources(vec![raptor_matrix_buffer, raptor_material_buffer.clone()])
-        .build();
-    let happy_spec = ObjectSpecBuilder::default()
-        .mesh(happy_mesh)
-        .shaders(vs_path.clone(), object_fs_path.clone())
-        .additional_resources(vec![happy_matrix_buffer, happy_material_buffer])
-        .build();
-    world_com.add_object_from_spec("raptor", raptor_spec);
-    world_com.add_object_from_spec("happy", happy_spec);
+    // used in main loop
+    let mut all_objects = HashMap::new();
+    let pipeline = system.pipeline_for_spec(0, &object.pipeline_spec); // 0 is the pass idx
+    let start_time = std::time::Instant::now();
+    let sampler = default_sampler(device.clone());
 
-    // change camera to one with a farther orbit distance
-    let camera = Camera::default();
-    let (light_info_p, light_pos_recv) = LightInfoProducer::new();
-    let producers = ProducerCollection::new(
-        vec![Box::new(texture_p)],
-        vec![Box::new(camera), Box::new(light_info_p)],
-    );
-    app.set_producers(producers);
-
-    // change system to include light info
-    let system = {
-        let pass = Pass::Complex {
-            name: "geometry",
-            images_needed: vec!["erato"],
-            images_created: vec!["resolve_color", "multisampled_color", "multisampled_depth", "resolve_depth"],
-            buffers_needed: vec!["view_proj", "light_info"],
-            render_pass: render_passes::multisampled_with_depth(app.get_device(), 4),
-        };
-
-        let output_tag = "resolve_color";
-        System::new(app.get_queue(), vec![pass], output_tag)
-    };
-    app.set_system(system);
-
-    let mut light_pos = [0.0, 0.0, 0.0];
-    // main loop
-    while !app.done {
-        let frame_info = app.get_frame_info();
-        if frame_info.keydowns.contains(&VirtualKeyCode::Escape) {
-            break;
-        }
+    while !window.update() {
+        // update camera and camera buffer
+        camera.update(window.get_frame_info());
+        let camera_buffer = camera.get_buffer(queue.clone());
 
         // update light
-        if let Some(pos) = light_pos_recv.try_iter().last() {
-            light_pos = pos;
-        }
+        let time = get_elapsed(start_time);
+        let light_x = (time / 4.0).sin() * 20.0;
+        let light_z = (time / 4.0).cos() * 20.0;
+        light.position = [light_x, 0.0, light_z, 0.0];
+        let light_buffer = bufferize_data(queue.clone(), light.clone());
 
-        let light_matrix: [[f32; 4]; 4] = glm::translate(
-            &glm::Mat4::identity(),
-            &glm::vec3(light_pos[0], light_pos[1], light_pos[2]),
-        )
-        .into();
-        let light_matrix_buffer = bufferize(app.get_device(), light_matrix);
-        let light_spec = ObjectSpecBuilder::default()
-            .shaders(vs_path.clone(), light_fs_path.clone())
-            .additional_resources(vec![light_matrix_buffer, raptor_material_buffer.clone()])
-            .build();
-        world_com.add_object_from_spec("light", light_spec);
+        object.custom_set = Some(Arc::new(
+            PersistentDescriptorSet::start(pipeline.clone(), 0)
+                .add_buffer(model_buffer.clone())
+                .unwrap()
+                .add_buffer(camera_buffer)
+                .unwrap()
+                .add_buffer(light_buffer)
+                .unwrap()
+                .add_buffer(material_buffer.clone())
+                .unwrap()
+                .add_sampled_image(diffuse_texture.clone(), sampler.clone())
+                .unwrap()
+                .add_sampled_image(specular_texture.clone(), sampler.clone())
+                .unwrap()
+                .add_sampled_image(normal_texture.clone(), sampler.clone())
+                .unwrap()
+                .build()
+                .unwrap(),
+        ));
 
-        app.draw_frame();
+        all_objects.insert("geometry", vec![object.clone()]);
 
-        world_com.delete_object("light");
-    }
+        // draw
+        // TODO: maybe make system take a mut pointer to window instead?
+        let swapchain_image = window.next_image();
+        let swapchain_fut = window.get_future();
 
-    app.print_fps();
-}
-
-fn bufferize<T: vulkano::memory::Content + 'static + Send + Sync>(
-    device: Arc<Device>,
-    data: T,
-) -> Arc<dyn BufferAccess + Send + Sync> {
-    let pool = vulkano::buffer::cpu_pool::CpuBufferPool::<T>::new(
-        device.clone(),
-        vulkano::buffer::BufferUsage::all(),
-    );
-
-    Arc::new(pool.next(data).unwrap())
-}
-
-fn relative_path(local_path: &str) -> PathBuf {
-    [env!("CARGO_MANIFEST_DIR"), local_path].iter().collect()
-}
-
-#[allow(dead_code)]
-#[derive(Copy, Clone)]
-struct Material {
-    ambient: [f32; 4],
-    diffuse: [f32; 4],
-    specular: [f32; 4],
-    shininess: f32,
-}
-
-struct LightInfoProducer {
-    light_info: LightInfo,
-    start_time: std::time::Instant,
-    orbit_distance: f32,
-    light_pos_send: Sender<[f32; 3]>,
-}
-
-impl LightInfoProducer {
-    fn new() -> (Self, Receiver<[f32; 3]>) {
-        let (send, recv) = channel();
-
-        let light_info = LightInfo {
-            position: [0.0, 0.0, 0.0, 0.0],
-            ambient: [0.4, 0.4, 0.4, 0.0],
-            diffuse: [1.5, 1.5, 1.5, 0.0],
-            specular: [2.0, 2.0, 2.0, 0.0],
-        };
-
-        let light_info_p = Self {
-            light_info,
-            start_time: std::time::Instant::now(),
-            orbit_distance: 30.0,
-            light_pos_send: send,
-        };
-
-        (light_info_p, recv)
-    }
-}
-
-impl BufferProducer for LightInfoProducer {
-    fn create_buffer(&self, device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync> {
-        let time = get_elapsed(self.start_time) / 4.0;
-        let x = time.sin() * self.orbit_distance;
-        let z = time.cos() * self.orbit_distance;
-        let pos = [x, 0.0, z];
-        self.light_pos_send.send(pos).unwrap();
-
-        let data = LightInfo {
-            position: [x, 0.0, z, 0.0],
-            ..self.light_info
-        };
-
-        let pool = vulkano::buffer::cpu_pool::CpuBufferPool::<LightInfo>::new(
-            device.clone(),
-            vulkano::buffer::BufferUsage::all(),
+        // draw_frame returns a future representing the completion of rendering
+        let frame_fut = system.draw_frame(
+            swapchain_image.dimensions(),
+            all_objects.clone(),
+            swapchain_image,
+            swapchain_fut,
         );
 
-        Arc::new(pool.next(data).unwrap())
+        window.present_future(frame_fut);
     }
 
-    fn name(&self) -> &str {
-        "light_info"
-    }
+    println!("FPS: {}", window.get_fps());
 }
 
 #[allow(dead_code)]
-#[derive(Copy, Clone)]
-struct LightInfo {
+#[derive(Clone)]
+struct Light {
     position: [f32; 4],
     ambient: [f32; 4],
     diffuse: [f32; 4],
     specular: [f32; 4],
 }
 
-type Matrix = [[f32; 4]; 4];
-
-struct Camera {
-    pub center_position: glm::Vec3,
-    pub front: glm::Vec3,
-    up: glm::Vec3,
-    right: glm::Vec3,
-    world_up: glm::Vec3,
-    // pitch and yaw are in radians
-    pub pitch: f32,
-    pub yaw: f32,
-    pub orbit_distance: f32,
-    mouse_sens: f32,
-    view_mat: CameraMatrix,
-    proj_mat: CameraMatrix,
-}
-
-// TODO: builders for changing fov, perspective, orbit dist, etc.
-impl Camera {
-    pub fn default() -> Self {
-        use glm::*;
-
-        let center_position = vec3(0.0, 0.0, 0.0);
-        let pitch: f32 = 0.0;
-        let yaw: f32 = std::f32::consts::PI / 2.0;
-        let front = normalize(&vec3(
-            pitch.cos() * yaw.cos(),
-            pitch.sin(),
-            pitch.cos() * yaw.sin(),
-        ));
-        let right = vec3(0.0, 0.0, 0.0);
-        let up = vec3(0.0, 1.0, 0.0);
-        let world_up = vec3(0.0, 1.0, 0.0);
-        let mouse_sens = 0.0007;
-        let orbit_distance = 24.0;
-
-        let view_mat: CameraMatrix = Mat4::identity().into();
-        let proj_mat: CameraMatrix = Mat4::identity().into();
-
-        Self {
-            center_position,
-            front,
-            up,
-            right,
-            world_up,
-            pitch,
-            yaw,
-            orbit_distance,
-            mouse_sens,
-            view_mat,
-            proj_mat,
-        }
-    }
-}
-
-impl BufferProducer for Camera {
-    fn update(&mut self, frame_info: FrameInfo) {
-        use glm::*;
-
-        // TODO: a lot of the stuff stored in Camera doesn't need to be
-        // stored across frames
-        let x = frame_info.mouse_movement[0];
-        let y = frame_info.mouse_movement[1];
-
-        self.pitch -= y * self.mouse_sens;
-        self.yaw += x * self.mouse_sens;
-        let halfpi = std::f32::consts::PI / 2.0;
-        let margin = 0.01;
-        let max_pitch = halfpi - margin;
-
-        if self.pitch > max_pitch {
-            self.pitch = max_pitch;
-        } else if self.pitch < -max_pitch {
-            self.pitch = -max_pitch;
-        }
-
-        // recompute front vector
-        self.front = normalize(&vec3(
-            self.pitch.cos() * self.yaw.cos(),
-            self.pitch.sin(),
-            self.pitch.cos() * self.yaw.sin(),
-        ));
-
-        self.right = normalize(&Vec3::cross(&self.front, &self.world_up));
-
-        // recompute view and projection matrices
-        let farther_front = self.front * self.orbit_distance;
-        self.view_mat = look_at(
-            &(self.center_position + farther_front),
-            &self.center_position,
-            &self.up,
-        )
-        .into();
-
-        let dims = frame_info.dimensions;
-        let aspect_ratio = (dims[0] as f32) / (dims[1] as f32);
-
-        // TODO: i don't get why i need to flip this upside down
-        self.proj_mat = scale(
-            &perspective(
-                aspect_ratio,
-                // fov
-                1.0,
-                // near
-                0.1,
-                // far
-                100_000_000.,
-            ),
-            &vec3(1.0, -1.0, 1.0),
-        )
-        .into();
-    }
-
-    fn create_buffer(&self, device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync> {
-        let pool = vulkano::buffer::cpu_pool::CpuBufferPool::<CameraData>::new(
-            device.clone(),
-            vulkano::buffer::BufferUsage::all(),
-        );
-
-        let data = CameraData {
-            view: self.view_mat,
-            proj: self.proj_mat,
-            pos: (self.front * self.orbit_distance).into(),
-        };
-        Arc::new(pool.next(data).unwrap())
-    }
-
-    fn name(&self) -> &str {
-        "view_proj"
-    }
-}
-
-type CameraMatrix = [[f32; 4]; 4];
-
 #[allow(dead_code)]
-struct CameraData {
-    view: CameraMatrix,
-    proj: CameraMatrix,
-    pos: [f32; 3],
-}
-
-fn load_obj(path: &Path) -> Mesh {
-    dbg![&path];
-    let (models, _materials) = tobj::load_obj(path).expect("Couldn't load OBJ file");
-
-    // only use first mesh
-    let mesh = &models[0].mesh;
-    let mut vertices: Vec<Vertex> = vec![];
-
-    for i in 0..mesh.positions.len() / 3 {
-        let pos = [
-            mesh.positions[i * 3],
-            mesh.positions[i * 3 + 1],
-            mesh.positions[i * 3 + 2],
-        ];
-        let normal = [
-            mesh.normals[i * 3],
-            mesh.normals[i * 3 + 1],
-            mesh.normals[i * 3 + 2],
-        ];
-        let tex_coord = [mesh.texcoords[i * 2], mesh.texcoords[i * 2 + 1] * -1.0];
-        let vertex = Vertex {
-            position: pos,
-            normal,
-            tex_coord,
-        };
-
-        vertices.push(vertex);
-    }
-
-    Mesh {
-        vertices: Box::new(vertices),
-        indices: mesh.indices.clone(),
-    }
-}
-
-struct TextureProducer {
-    image: Arc<dyn ImageViewAccess + Send + Sync>,
-}
-
-impl TextureProducer {
-    fn new(queue: Arc<Queue>) -> Self {
-        let (texture, tex_future) = {
-            let image = image::load_from_memory_with_format(
-                include_bytes!("raptor-brighter.png"),
-                ImageFormat::PNG,
-            )
-            .unwrap()
-            .to_rgba();
-            let image_data = image.into_raw().clone();
-
-            ImmutableImage::from_iter(
-                image_data.iter().cloned(),
-                Dimensions::Dim2d {
-                    width: 1024,
-                    height: 1024,
-                },
-                Format::R8G8B8A8Srgb,
-                queue.clone(),
-            )
-            .unwrap()
-        };
-
-        tex_future
-            .then_signal_fence_and_flush()
-            .unwrap()
-            .wait(None)
-            .unwrap();
-
-        Self { image: texture }
-    }
-}
-
-impl ImageProducer for TextureProducer {
-    fn create_image(&self, _device: Arc<Device>) -> Arc<dyn ImageViewAccess + Send + Sync> {
-        self.image.clone()
-    }
-
-    fn name(&self) -> &str {
-        "erato"
-    }
+struct Material {
+    shininess: f32,
 }

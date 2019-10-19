@@ -2,72 +2,88 @@ use render_engine as re;
 
 /*
 Annoyances:
-ObjectSpecBuilder is great, but can only be used with world right now. Fix that.
 Why do I have to manage queue and device? :(
-Easier way to get default shaders
 */
 
-use re::mesh_gen;
-use re::pipeline_cache::PipelineSpec;
-use re::system::RenderableObject;
-use re::template_systems;
-use re::utils::ibuf_from_vec;
+use re::collection_cache::pds_for_buffers;
+use re::render_passes;
+use re::system::{Pass, System};
+use re::utils::{bufferize_data, ObjectSpec};
 use re::window::Window;
 
-use vulkano::pipeline::input_assembly::PrimitiveTopology;
+use nalgebra_glm::*;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+
+use tests_render_engine::*;
 
 fn main() {
-    let mut window = Window::new();
-    let queue = window.get_queue();
+    // initialize window
+    let (mut window, queue) = Window::new();
     let device = queue.device().clone();
 
-    let (mut system, mut producers) = template_systems::forward_with_depth(queue.clone());
-    // TODO: which render pass does this refer to?
-    let render_pass = system.get_passes()[0].get_render_pass().clone();
+    // create system
+    let render_pass = render_passes::with_depth(device.clone());
+    let mut system = System::new(
+        queue.clone(),
+        vec![Pass {
+            name: "geometry",
+            images_created_tags: vec!["color", "depth"],
+            images_needed_tags: vec![],
+            render_pass: render_pass.clone(),
+        }],
+        "color",
+    );
+
     window.set_render_pass(render_pass);
 
-    let path = relative_path("meshes/dragon.obj");
-    let mesh = mesh_gen::load_obj(&path).unwrap();
-    let vbuf = mesh.vertices.create_vbuf(device.clone());
-    let ibuf = ibuf_from_vec(device.clone(), &mesh.indices);
-    let pipeline_spec = PipelineSpec {
+    // create buffer for model matrix
+    let model_data: [[f32; 4]; 4] = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
+    let model_buffer = bufferize_data(queue.clone(), model_data);
+
+    // initialize camera
+    let mut camera = OrbitCamera::default();
+
+    // load mesh and create objec
+    let mesh = load_obj(&relative_path("meshes/raptor.obj"));
+    let mut object = ObjectSpec {
         vs_path: relative_path("shaders/no_app_vert.glsl"),
         fs_path: relative_path("shaders/no_app_frag.glsl"),
-        fill_type: PrimitiveTopology::TriangleList,
-    };
-    let object = RenderableObject {
-        pipeline_spec,
-        vbuf,
-        ibuf,
-    };
+        mesh,
+        depth_buffer: true,
+        .. Default::default()
+    }.build(queue.clone());
+
+    // used in main loop
     let mut all_objects = HashMap::new();
-    all_objects.insert("geometry", vec![object]);
+    let pipeline = system.pipeline_for_spec(0, &object.pipeline_spec);    // 0 is the pass idx
 
     while !window.update() {
+        // update camera and camera buffer
+        camera.update(window.get_frame_info());
+        let camera_buffer = camera.get_buffer(queue.clone());
+
+        let set =
+            pds_for_buffers(pipeline.clone(), &[model_buffer.clone(), camera_buffer], 0).unwrap(); // 0 is the descriptor set idx
+        object.custom_set = Some(set);
+
+        all_objects.insert("geometry", vec![object.clone()]);
+
         // draw
         // TODO: maybe make system take a mut pointer to window instead?
         let swapchain_image = window.next_image();
         let swapchain_fut = window.get_future();
-        let shared_resources = producers.get_shared_resources(device.clone());
 
         // draw_frame returns a future representing the completion of rendering
         let frame_fut = system.draw_frame(
             swapchain_image.dimensions(),
             all_objects.clone(),
-            shared_resources,
             swapchain_image,
             swapchain_fut,
         );
 
         window.present_future(frame_fut);
-
-        producers.update(window.get_frame_info());
     }
-}
 
-fn relative_path(local_path: &str) -> PathBuf {
-    [env!("CARGO_MANIFEST_DIR"), local_path].iter().collect()
+    println!("FPS: {}", window.get_fps());
 }

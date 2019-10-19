@@ -20,11 +20,11 @@ layout(set = 1, binding = 1) uniform LightInfo {
     vec3 specular;
 } light;
 
-layout(set = 2, binding = 0) uniform Model {
+layout(set = 1, binding = 2) uniform Model {
     mat4 model;
 } model;
 
-layout(set = 2, binding = 1) uniform Material {
+layout(set = 1, binding = 3) uniform Material {
     vec3 ambient;
     vec3 diffuse;
     vec3 specular;
