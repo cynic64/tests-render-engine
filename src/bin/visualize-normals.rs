@@ -46,14 +46,18 @@ fn main() {
     window.set_render_pass(render_pass.clone());
 
     // create buffer for model matrix
-    let model_data: [[f32; 4]; 4] = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
+    let model_data: [[f32; 4]; 4] = translate(
+        &scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)),
+        &vec3(0.0, -6.0, 0.0),
+    )
+    .into();
     let model_buffer = bufferize_data(queue.clone(), model_data);
 
     // initialize camera
     let mut camera = OrbitCamera::default();
 
     // load meshes and create objects
-    let (raptor_mesh, raptor_verts) = load_obj(&relative_path("meshes/raptor.obj"));
+    let (raptor_mesh, raptor_verts) = load_obj(&relative_path("meshes/cube.obj"));
     let normals_mesh = normals_vis(&raptor_verts);
     let mut raptor = ObjectSpec {
         vs_path: relative_path("shaders/visualize-normals/object_vert.glsl"),
@@ -75,8 +79,12 @@ fn main() {
 
     // used in main loop
     let mut all_objects = HashMap::new();
-    let raptor_pipe = raptor.pipeline_spec.concrete(device.clone(), render_pass.clone());
-    let normals_pipe = normals.pipeline_spec.concrete(device.clone(), render_pass.clone());
+    let raptor_pipe = raptor
+        .pipeline_spec
+        .concrete(device.clone(), render_pass.clone());
+    let normals_pipe = normals
+        .pipeline_spec
+        .concrete(device.clone(), render_pass.clone());
 
     while !window.update() {
         // update camera and camera buffer

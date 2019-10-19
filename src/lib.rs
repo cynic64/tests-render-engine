@@ -109,6 +109,22 @@ impl OrbitCamera {
     }
 
     pub fn update(&mut self, frame_info: FrameInfo) {
+        // check for scroll wheel
+        let scroll: f32 = frame_info.all_events.iter().map(|ev| match ev {
+            winit::Event::WindowEvent {
+                event: winit::WindowEvent::MouseWheel {
+                    delta: winit::MouseScrollDelta::LineDelta(_, y),
+                    ..
+                },
+                ..
+            } => {
+                *y
+            },
+            _ => 0.0,
+        }).sum();
+
+        self.orbit_distance += scroll;
+
         // TODO: a lot of the stuff stored in OrbitCamera doesn't need to be
         // stored across frames
         let x = frame_info.mouse_movement[0];
