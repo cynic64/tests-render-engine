@@ -65,7 +65,7 @@ fn main() {
 
     let normals_mesh = normals_vis(&raptor_verts, &raptor_indices);
     let raptor_mesh = Mesh {
-        vertices: Arc::new(raptor_verts),
+        vertices: raptor_verts,
         indices: raptor_indices,
     };
 
@@ -183,7 +183,6 @@ fn ptnt_from(vertices: &[Vertex3D], indices: &[u32]) -> (Vec<PosTexNormTan>, Vec
         .iter()
         .enumerate()
         .map(|(idx, v)| {
-            let n = vec3(v.normal[0], v.normal[1], v.normal[2]);
             let t0 = normalize(&tangents[idx]);
             let t1 = normalize(&bitangents[idx]);
 
@@ -200,46 +199,46 @@ fn ptnt_from(vertices: &[Vertex3D], indices: &[u32]) -> (Vec<PosTexNormTan>, Vec
     (new_vertices, indices.to_vec())
 }
 
-fn normals_vis(vertices: &[PosTexNormTan], indices: &[u32]) -> Mesh {
+fn normals_vis(vertices: &[PosTexNormTan], indices: &[u32]) -> Mesh<PosColor> {
     let faces = faces_from(vertices, indices);
     let wireframe = faces.iter().flat_map(|f| {
         vec![
-            PosColorV {
+            PosColor {
                 position: f[0].position,
                 color: [0.5, 0.5, 0.5],
             },
-            PosColorV {
+            PosColor {
                 position: f[1].position,
                 color: [0.5, 0.5, 0.5],
             },
-            PosColorV {
+            PosColor {
                 position: f[1].position,
                 color: [0.5, 0.5, 0.5],
             },
-            PosColorV {
+            PosColor {
                 position: f[2].position,
                 color: [0.5, 0.5, 0.5],
             },
-            PosColorV {
+            PosColor {
                 position: f[2].position,
                 color: [0.5, 0.5, 0.5],
             },
-            PosColorV {
+            PosColor {
                 position: f[0].position,
                 color: [0.5, 0.5, 0.5],
             },
         ]
     });
 
-    let vertices: Vec<PosColorV> = vertices
+    let vertices: Vec<PosColor> = vertices
         .iter()
         .flat_map(|v| {
             vec![
-                PosColorV {
+                PosColor {
                     position: v.position,
                     color: [1.0, 0.0, 0.0],
                 },
-                PosColorV {
+                PosColor {
                     position: [
                         v.position[0] + v.normal[0] * 0.2,
                         v.position[1] + v.normal[1] * 0.2,
@@ -247,11 +246,11 @@ fn normals_vis(vertices: &[PosTexNormTan], indices: &[u32]) -> Mesh {
                     ],
                     color: [1.0, 0.0, 0.0],
                 },
-                PosColorV {
+                PosColor {
                     position: v.position,
                     color: [0.0, 1.0, 0.0],
                 },
-                PosColorV {
+                PosColor {
                     position: [
                         v.position[0] + v.tangent[0] * 0.2,
                         v.position[1] + v.tangent[1] * 0.2,
@@ -259,11 +258,11 @@ fn normals_vis(vertices: &[PosTexNormTan], indices: &[u32]) -> Mesh {
                     ],
                     color: [0.0, 1.0, 0.0],
                 },
-                PosColorV {
+                PosColor {
                     position: v.position,
                     color: [0.0, 0.0, 1.0],
                 },
-                PosColorV {
+                PosColor {
                     position: [
                         v.position[0] + v.bitangent[0] * 0.2,
                         v.position[1] + v.bitangent[1] * 0.2,
@@ -279,7 +278,7 @@ fn normals_vis(vertices: &[PosTexNormTan], indices: &[u32]) -> Mesh {
     let indices: Vec<u32> = (0..vertices.len()).map(|x| x as u32).collect();
 
     Mesh {
-        vertices: Arc::new(vertices),
+        vertices,
         indices,
     }
 }
@@ -353,11 +352,11 @@ fn faces_from(vertices: &[PosTexNormTan], indices: &[u32]) -> Vec<Face> {
 type Face = [PosTexNormTan; 3];
 
 #[derive(Default, Debug, Clone, Copy)]
-struct PosColorV {
+struct PosColor {
     position: [f32; 3],
     color: [f32; 3],
 }
-vulkano::impl_vertex!(PosColorV, position, color);
+vulkano::impl_vertex!(PosColor, position, color);
 
 #[derive(Default, Debug, Clone, Copy)]
 struct PosTexNormTan {

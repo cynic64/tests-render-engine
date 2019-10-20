@@ -1,7 +1,7 @@
 use render_engine as re;
 
 use re::input::FrameInfo;
-use re::mesh::{Mesh, Vertex3D};
+use re::mesh::Vertex3D;
 use re::utils::bufferize_data;
 
 // TODO: move default-sampler to re
@@ -18,7 +18,7 @@ pub fn relative_path(local_path: &str) -> PathBuf {
     [env!("CARGO_MANIFEST_DIR"), local_path].iter().collect()
 }
 
-pub fn load_obj(path: &Path) -> (Mesh, Vec<Vertex3D>) {
+pub fn load_obj(path: &Path) -> (Vec<Vertex3D>, Vec<u32>) {
     let (models, _materials) = tobj::load_obj(path).expect("Couldn't load OBJ file");
 
     // only use first mesh
@@ -49,12 +49,7 @@ pub fn load_obj(path: &Path) -> (Mesh, Vec<Vertex3D>) {
     println!("Vertices: {}", vertices.len());
     println!("Indices: {}", mesh.indices.len());
 
-    let mesh = Mesh {
-        vertices: Arc::new(vertices.clone()),
-        indices: mesh.indices.clone(),
-    };
-
-    (mesh, vertices)
+    (vertices, mesh.indices.clone())
 }
 
 #[derive(Clone)]
