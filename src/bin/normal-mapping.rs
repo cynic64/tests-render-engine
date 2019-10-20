@@ -66,8 +66,8 @@ fn main() {
     let normals_mesh = normals_vis(&raptor_mesh);
 
     let mut raptor = ObjectSpec {
-        vs_path: relative_path("shaders/visualize-normals/object_vert.glsl"),
-        fs_path: relative_path("shaders/visualize-normals/object_frag.glsl"),
+        vs_path: relative_path("shaders/normal-mapping/object_vert.glsl"),
+        fs_path: relative_path("shaders/normal-mapping/object_frag.glsl"),
         mesh: raptor_mesh,
         depth_buffer: true,
         ..Default::default()
@@ -75,8 +75,8 @@ fn main() {
     .build(queue.clone());
 
     let mut normals = ObjectSpec {
-        vs_path: relative_path("shaders/visualize-normals/debug_vert.glsl"),
-        fs_path: relative_path("shaders/visualize-normals/debug_frag.glsl"),
+        vs_path: relative_path("shaders/normal-mapping/debug_vert.glsl"),
+        fs_path: relative_path("shaders/normal-mapping/debug_frag.glsl"),
         mesh: normals_mesh,
         depth_buffer: true,
         fill_type: PrimitiveTopology::LineList,
@@ -148,10 +148,10 @@ fn main() {
             debug = !debug;
             if debug {
                 raptor.pipeline_spec.fs_path =
-                    relative_path("shaders/visualize-normals/object_frag_normal.glsl");
+                    relative_path("shaders/normal-mapping/object_frag_debug.glsl");
             } else {
                 raptor.pipeline_spec.fs_path =
-                    relative_path("shaders/visualize-normals/object_frag.glsl");
+                    relative_path("shaders/normal-mapping/object_frag.glsl");
             }
         }
 
