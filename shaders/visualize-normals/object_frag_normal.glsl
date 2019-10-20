@@ -17,7 +17,11 @@ layout(set = 0, binding = 1) uniform Camera {
     vec3 pos;
 } camera;
 
-layout(set = 0, binding = 2) uniform sampler2D normal_tex;
+layout(set = 0, binding = 2) uniform Light {
+    vec3 pos;
+} light;
+
+layout(set = 0, binding = 3) uniform sampler2D normal_tex;
 
 void main() {
     f_color = vec4(v_normal * 0.5 + 0.5, 1.0);

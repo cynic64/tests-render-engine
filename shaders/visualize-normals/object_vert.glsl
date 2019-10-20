@@ -19,7 +19,11 @@ layout(set = 0, binding = 1) uniform Camera {
     mat4 proj;
 } camera;
 
-layout(set = 0, binding = 2) uniform sampler2D normal_tex;
+layout(set = 0, binding = 2) uniform Light {
+    vec3 pos;
+} light;
+
+layout(set = 0, binding = 3) uniform sampler2D normal_tex;
 
 void main() {
      v_pos = vec3(model.model * vec4(position, 1.0));

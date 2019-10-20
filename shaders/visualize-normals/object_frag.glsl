@@ -17,7 +17,11 @@ layout(set = 0, binding = 1) uniform Camera {
     vec3 pos;
 } camera;
 
-layout(set = 0, binding = 2) uniform sampler2D normal_tex;
+layout(set = 0, binding = 2) uniform Light {
+  vec3 pos;
+} light;
+
+layout(set = 0, binding = 3) uniform sampler2D normal_tex;
 
 void main() {
     vec3 m_ambient = vec3(0.2);
@@ -36,7 +40,7 @@ void main() {
     vec3 ambient = m_diffuse * m_ambient;
 
     // diffuse
-    vec3 light_dir = normalize(camera.pos - v_pos);
+    vec3 light_dir = normalize(light.pos - v_pos);
 
     float diff = max(dot(normal, light_dir), 0.0);
     vec3 diffuse = diff * m_diffuse;

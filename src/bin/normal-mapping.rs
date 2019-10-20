@@ -6,7 +6,7 @@ Why do I have to manage queue and device? :(
 */
 
 use re::collection_cache::pds_for_buffers;
-use re::input::VirtualKeyCode;
+use re::input::{get_elapsed, VirtualKeyCode};
 use re::mesh::{Mesh, ObjectSpec};
 use re::render_passes;
 use re::system::{Pass, System};
@@ -87,6 +87,11 @@ fn main() {
     // textures
     let normal_texture = load_texture(queue.clone(), &relative_path("textures/raptor-normal.png"));
 
+    // light
+    let mut light = Light {
+        position: [10.0, 0.0, 0.0],
+    };
+
     // used in main loop
     let mut all_objects = HashMap::new();
     let raptor_pipe = raptor
@@ -96,6 +101,7 @@ fn main() {
         .pipeline_spec
         .concrete(device.clone(), render_pass.clone());
     let sampler = default_sampler(device.clone());
+    let start_time = std::time::Instant::now();
 
     let mut debug: bool = false;
 
@@ -104,11 +110,21 @@ fn main() {
         camera.update(window.get_frame_info());
         let camera_buffer = camera.get_buffer(queue.clone());
 
+        // update light
+        let time = get_elapsed(start_time);
+        let light_x = (time / 4.0).sin() * 20.0;
+        let light_z = (time / 4.0).cos() * 20.0;
+        light.position = [light_x, 0.0, light_z];
+        let light_buffer = bufferize_data(queue.clone(), light.clone());
+
+        // create set
         raptor.custom_set = Some(Arc::new(
             PersistentDescriptorSet::start(raptor_pipe.clone(), 0)
                 .add_buffer(model_buffer.clone())
                 .unwrap()
                 .add_buffer(camera_buffer.clone())
+                .unwrap()
+                .add_buffer(light_buffer.clone())
                 .unwrap()
                 .add_sampled_image(normal_texture.clone(), sampler.clone())
                 .unwrap()
@@ -124,8 +140,6 @@ fn main() {
         .unwrap(); // 0 is the descriptor set idx
         normals.custom_set = Some(normals_set);
 
-        all_objects.insert("geometry", vec![raptor.clone(), normals.clone()]);
-
         if window
             .get_frame_info()
             .keydowns
@@ -134,12 +148,19 @@ fn main() {
             debug = !debug;
             if debug {
                 raptor.pipeline_spec.fs_path =
-                    relative_path("shaders/visualize-normals/object_frag_normal.glsl")
+                    relative_path("shaders/visualize-normals/object_frag_normal.glsl");
             } else {
                 raptor.pipeline_spec.fs_path =
                     relative_path("shaders/visualize-normals/object_frag.glsl");
             }
         }
+
+        let objects = if debug {
+            vec![raptor.clone(), normals.clone()]
+        } else {
+            vec![raptor.clone()]
+        };
+        all_objects.insert("geometry", objects);
 
         // draw
         system.render_to_window(&mut window, all_objects.clone());
@@ -239,6 +260,11 @@ fn faces_from(vertices: &[PosTexNormTan], indices: &[u32]) -> Vec<Face> {
 }
 
 type Face = [PosTexNormTan; 3];
+
+#[derive(Clone)]
+struct Light {
+    position: [f32; 3],
+}
 
 #[derive(Default, Debug, Clone, Copy)]
 struct PosColor {
