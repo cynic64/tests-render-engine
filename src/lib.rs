@@ -1,7 +1,6 @@
 use render_engine as re;
 
 use re::input::FrameInfo;
-use re::mesh::Vertex3D;
 use re::utils::bufferize_data;
 
 // TODO: move default-sampler to re
@@ -11,45 +10,13 @@ use vulkano::sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode};
 
 use nalgebra_glm::*;
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
+
+pub mod mesh;
 
 pub fn relative_path(local_path: &str) -> PathBuf {
     [env!("CARGO_MANIFEST_DIR"), local_path].iter().collect()
-}
-
-pub fn load_obj(path: &Path) -> (Vec<Vertex3D>, Vec<u32>) {
-    let (models, _materials) = tobj::load_obj(path).expect("Couldn't load OBJ file");
-
-    // only use first mesh
-    let mesh = &models[0].mesh;
-    let mut vertices: Vec<Vertex3D> = vec![];
-
-    for i in 0..mesh.positions.len() / 3 {
-        let pos = [
-            mesh.positions[i * 3],
-            mesh.positions[i * 3 + 1],
-            mesh.positions[i * 3 + 2],
-        ];
-        let normal = [
-            mesh.normals[i * 3],
-            mesh.normals[i * 3 + 1],
-            mesh.normals[i * 3 + 2],
-        ];
-        let tex_coord = [mesh.texcoords[i * 2], mesh.texcoords[i * 2 + 1] * -1.0];
-        let vertex = Vertex3D {
-            position: pos,
-            normal,
-            tex_coord,
-        };
-
-        vertices.push(vertex);
-    }
-
-    println!("Vertices: {}", vertices.len());
-    println!("Indices: {}", mesh.indices.len());
-
-    (vertices, mesh.indices.clone())
 }
 
 #[derive(Clone)]
