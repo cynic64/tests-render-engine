@@ -67,9 +67,11 @@ fn main() {
     );
 
     // load texture
+    let start_time = std::time::Instant::now();
     let diffuse_texture = load_texture(queue.clone(), &relative_path("textures/raptor-diffuse.png"));
     let specular_texture = load_texture(queue.clone(), &relative_path("textures/raptor-specular.png"));
     let normal_texture = load_texture(queue.clone(), &relative_path("textures/raptor-normal.png"));
+    println!("Time taken to load textures: {}s", get_elapsed(start_time));
 
     // initialize camera
     let mut camera = OrbitCamera::default();
