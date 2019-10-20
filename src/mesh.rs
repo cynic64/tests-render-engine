@@ -45,7 +45,6 @@ pub fn add_tangents(mesh: &Mesh<PosTexNorm>) -> Mesh<PosTexNormTan> {
     let (vertices, indices) = (&mesh.vertices, &mesh.indices);
 
     let mut tangents: Vec<Vec3> = vec![vec3(0.0, 0.0, 0.0); vertices.len()];
-    let mut bitangents: Vec<Vec3> = vec![vec3(0.0, 0.0, 0.0); vertices.len()];
 
     for i in 0..indices.len() / 3 {
         let face = [
@@ -53,29 +52,23 @@ pub fn add_tangents(mesh: &Mesh<PosTexNorm>) -> Mesh<PosTexNormTan> {
             vertices[indices[i * 3 + 1] as usize],
             vertices[indices[i * 3 + 2] as usize],
         ];
-        let (tangent, bitangent) = tangent_bitangent_for_face(&face);
+        let (tangent, _bitangent) = tangent_bitangent_for_face(&face);
         tangents[indices[i * 3] as usize] += tangent;
         tangents[indices[i * 3 + 1] as usize] += tangent;
         tangents[indices[i * 3 + 2] as usize] += tangent;
-
-        bitangents[indices[i * 3] as usize] += bitangent;
-        bitangents[indices[i * 3 + 1] as usize] += bitangent;
-        bitangents[indices[i * 3 + 2] as usize] += bitangent;
     }
 
     let new_vertices: Vec<PosTexNormTan> = vertices
         .iter()
         .enumerate()
         .map(|(idx, v)| {
-            let t0 = normalize(&tangents[idx]);
-            let t1 = normalize(&bitangents[idx]);
+            let t = normalize(&tangents[idx]);
 
             PosTexNormTan {
                 position: v.position,
                 tex_coord: v.tex_coord,
                 normal: v.normal,
-                tangent: t0.into(),
-                bitangent: t1.into(),
+                tangent: t.into(),
             }
         })
         .collect();
@@ -139,13 +132,5 @@ pub struct PosTexNormTan {
     pub tex_coord: [f32; 2],
     pub normal: [f32; 3],
     pub tangent: [f32; 3],
-    pub bitangent: [f32; 3],
 }
-vulkano::impl_vertex!(
-    PosTexNormTan,
-    position,
-    tex_coord,
-    normal,
-    tangent,
-    bitangent
-);
+vulkano::impl_vertex!(PosTexNormTan, position, tex_coord, normal, tangent);

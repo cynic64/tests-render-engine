@@ -4,7 +4,6 @@ layout(location = 0) in vec3 v_pos;
 layout(location = 1) in vec2 v_tex_coord;
 layout(location = 2) in vec3 v_normal;
 layout(location = 3) in vec3 v_tangent;
-layout(location = 4) in vec3 v_bitangent;
 
 layout(location = 0) out vec4 f_color;
 
@@ -26,8 +25,7 @@ void main() {
 
     vec3 norm = normalize(v_normal);
     vec3 tangent = normalize(v_tangent);
-    vec3 bitangent = normalize(v_bitangent);
-    // mat3 TBN = mat3(tangent, bitangent, norm);
+    vec3 bitangent = cross(tangent, norm);
     mat3 TBN = mat3(tangent, bitangent, norm);
 
     vec3 normal = texture(normal_tex, v_tex_coord).rgb;

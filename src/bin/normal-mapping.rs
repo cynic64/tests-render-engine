@@ -185,17 +185,18 @@ fn normals_vis(mesh: &Mesh<PosTexNormTan>) -> Mesh<PosColor> {
     let vertices: Vec<PosColor> = vertices
         .iter()
         .flat_map(|v| {
+            let normal = make_vec3(&v.normal);
+            let tangent = make_vec3(&v.tangent);
+            let bitangent = tangent.cross(&normal);
+            let position = make_vec3(&v.position);
+
             vec![
                 PosColor {
                     position: v.position,
                     color: [1.0, 0.0, 0.0],
                 },
                 PosColor {
-                    position: [
-                        v.position[0] + v.normal[0] * 0.2,
-                        v.position[1] + v.normal[1] * 0.2,
-                        v.position[2] + v.normal[2] * 0.2,
-                    ],
+                    position: (position + normal * 0.2).into(),
                     color: [1.0, 0.0, 0.0],
                 },
                 PosColor {
@@ -203,11 +204,7 @@ fn normals_vis(mesh: &Mesh<PosTexNormTan>) -> Mesh<PosColor> {
                     color: [0.0, 1.0, 0.0],
                 },
                 PosColor {
-                    position: [
-                        v.position[0] + v.tangent[0] * 0.2,
-                        v.position[1] + v.tangent[1] * 0.2,
-                        v.position[2] + v.tangent[2] * 0.2,
-                    ],
+                    position: (position + tangent * 0.2).into(),
                     color: [0.0, 1.0, 0.0],
                 },
                 PosColor {
@@ -215,11 +212,7 @@ fn normals_vis(mesh: &Mesh<PosTexNormTan>) -> Mesh<PosColor> {
                     color: [0.0, 0.0, 1.0],
                 },
                 PosColor {
-                    position: [
-                        v.position[0] + v.bitangent[0] * 0.2,
-                        v.position[1] + v.bitangent[1] * 0.2,
-                        v.position[2] + v.bitangent[2] * 0.2,
-                    ],
+                    position: (position + bitangent * 0.2).into(),
                     color: [0.0, 0.0, 1.0],
                 },
             ]
