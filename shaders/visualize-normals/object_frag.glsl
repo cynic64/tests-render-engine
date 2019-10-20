@@ -41,12 +41,17 @@ void main() {
 
     // diffuse
     vec3 light_dir = normalize(light.pos - v_pos);
-
     float diff = max(dot(normal, light_dir), 0.0);
     vec3 diffuse = diff * m_diffuse;
 
+    // specular
+    vec3 view_dir = normalize(camera.pos - v_pos);
+    vec3 reflect_dir = reflect(-light_dir, normal);
+    float spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
+    vec3 specular = vec3(spec) * 0.3;
+
     // result
-    vec3 result = ambient + diffuse;
+    vec3 result = ambient + diffuse + specular;
 
     f_color = vec4(result, 1.0);
 }
