@@ -21,30 +21,5 @@ layout(set = 0, binding = 1) uniform Camera {
 layout(set = 0, binding = 2) uniform sampler2D normal_tex;
 
 void main() {
-    vec3 m_ambient = vec3(0.2);
-    vec3 m_diffuse = vec3(0.7);
-
-    vec3 norm = normalize(v_normal);
-    vec3 tangent = normalize(v_tangent);
-    vec3 bitangent = normalize(v_bitangent);
-    // mat3 TBN = mat3(tangent, bitangent, norm);
-    mat3 TBN = mat3(tangent, bitangent, norm);
-
-    vec3 normal = texture(normal_tex, v_tex_coord).rgb;
-    normal = normalize(normal * 2.0 - 1.0);
-    normal = normalize(TBN * normal);
-
-    // ambient
-    vec3 ambient = m_diffuse * m_ambient;
-
-    // diffuse
-    vec3 light_dir = normalize(camera.pos - v_pos);
-
-    float diff = max(dot(v_normal, light_dir), 0.0);
-    vec3 diffuse = diff * m_diffuse;
-
-    // result
-    vec3 result = ambient + diffuse;
-
     f_color = vec4(v_normal * 0.5 + 0.5, 1.0);
 }

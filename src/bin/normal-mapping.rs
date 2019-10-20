@@ -142,19 +142,7 @@ fn main() {
         }
 
         // draw
-        // TODO: maybe make system take a mut pointer to window instead?
-        let swapchain_image = window.next_image();
-        let swapchain_fut = window.get_future();
-
-        // draw_frame returns a future representing the completion of rendering
-        let frame_fut = system.draw_frame(
-            swapchain_image.dimensions(),
-            all_objects.clone(),
-            swapchain_image,
-            swapchain_fut,
-        );
-
-        window.present_future(frame_fut);
+        system.render_to_window(&mut window, all_objects.clone());
     }
 
     println!("FPS: {}", window.get_fps());
