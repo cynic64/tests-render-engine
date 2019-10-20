@@ -3,6 +3,9 @@
 layout(location = 0) in vec3 v_pos;
 layout(location = 1) in vec3 v_normal;
 layout(location = 2) in vec2 v_tex_coord;
+layout(location = 3) in vec3 tan_light_pos;
+layout(location = 4) in vec3 tan_cam_pos;
+layout(location = 5) in vec3 tan_frag_pos;
 
 layout(location = 0) out vec4 f_color;
 
@@ -35,20 +38,20 @@ void main() {
     vec3 tex_diffuse = texture(diffuse_texture, v_tex_coord).rgb;
     vec3 tex_specular = texture(specular_texture, v_tex_coord).rgb;
 
-    vec3 tex_normal = normalize(texture(normal_texture, v_tex_coord).rgb * 2.0 - 1.0);
+    vec3 normal = normalize(texture(normal_texture, v_tex_coord).rgb * 2.0 - 1.0);
 
     // ambient
     vec3 ambient = tex_diffuse * light.ambient;
 
     // diffuse
-    vec3 light_dir = normalize(light.position - v_pos);
+    vec3 light_dir = normalize(tan_light_pos - tan_frag_pos);
 
-    float diff = max(dot(v_normal, light_dir), 0.0);
+    float diff = max(dot(normal, light_dir), 0.0);
     vec3 diffuse = light.diffuse * (diff * tex_diffuse);
 
     // specular
-    vec3 view_dir = normalize(camera.pos - v_pos);
-    vec3 reflect_dir = reflect(-light_dir, v_normal);
+    vec3 view_dir = normalize(tan_cam_pos - tan_frag_pos);
+    vec3 reflect_dir = reflect(-light_dir, normal);
     float spec = pow(max(dot(view_dir, reflect_dir), 0.0), material.shininess);
     vec3 specular = light.specular * (spec * tex_specular);
 

@@ -8,7 +8,8 @@ Why do I have to manage queue and device? :(
 use re::input::get_elapsed;
 use re::render_passes;
 use re::system::{Pass, System};
-use re::utils::{bufferize_data, ObjectSpec, load_texture};
+use re::utils::{bufferize_data, load_texture};
+use re::mesh::ObjectSpec;
 use re::window::Window;
 
 // TODO: reeeeee i shouldn't have to do this
@@ -18,7 +19,8 @@ use nalgebra_glm::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tests_render_engine::{default_sampler, load_obj, relative_path, OrbitCamera};
+use tests_render_engine::{default_sampler, relative_path, OrbitCamera};
+use tests_render_engine::mesh::{add_tangents, load_obj};
 
 fn main() {
     // initialize window
@@ -26,29 +28,34 @@ fn main() {
     let device = queue.device().clone();
 
     // create system
-    let render_pass = render_passes::with_depth(device.clone());
+    let render_pass = render_passes::multisampled_with_depth(device.clone(), 4);
     let mut system = System::new(
         queue.clone(),
         vec![Pass {
             name: "geometry",
-            images_created_tags: vec!["color", "depth"],
+            images_created_tags: vec![
+                "resolve_color",
+                "multisampeld_color",
+                "multisampled_depth",
+                "resolve_depth",
+            ],
             images_needed_tags: vec![],
             render_pass: render_pass.clone(),
         }],
-        "color",
+        "resolve_color",
     );
 
     window.set_render_pass(render_pass);
 
     // create buffers for model matrix, light and materials
-    let model_data: [[f32; 4]; 4] = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
+    let model_data: [[f32; 4]; 4] = translate(&Mat4::identity(), &vec3(0.0, -6.0, 0.0)).into();
     let model_buffer = bufferize_data(queue.clone(), model_data);
 
     let mut light = Light {
         position: [10.0, 0.0, 0.0, 0.0],
-        ambient: [0.8, 0.8, 0.8, 0.0],
-        diffuse: [2.5, 2.5, 2.5, 0.0],
-        specular: [3.0, 3.0, 3.0, 0.0],
+        ambient: [0.2, 0.2, 0.2, 0.0],
+        diffuse: [0.8, 0.8, 0.8, 0.0],
+        specular: [1.0, 1.0, 1.0, 0.0],
     };
 
     // TODO: implement Copy for queue?
@@ -68,7 +75,8 @@ fn main() {
     let mut camera = OrbitCamera::default();
 
     // load mesh and create object
-    let mesh = load_obj(&relative_path("meshes/raptor.obj"));
+    let basic_mesh = load_obj(&relative_path("meshes/raptor.obj"));
+    let mesh = add_tangents(&basic_mesh);
     let mut object = ObjectSpec {
         vs_path: relative_path("shaders/lighting/object_vert.glsl"),
         fs_path: relative_path("shaders/lighting/object_frag.glsl"),
@@ -119,19 +127,7 @@ fn main() {
         all_objects.insert("geometry", vec![object.clone()]);
 
         // draw
-        // TODO: maybe make system take a mut pointer to window instead?
-        let swapchain_image = window.next_image();
-        let swapchain_fut = window.get_future();
-
-        // draw_frame returns a future representing the completion of rendering
-        let frame_fut = system.draw_frame(
-            swapchain_image.dimensions(),
-            all_objects.clone(),
-            swapchain_image,
-            swapchain_fut,
-        );
-
-        window.present_future(frame_fut);
+        system.render_to_window(&mut window, all_objects.clone());
     }
 
     println!("FPS: {}", window.get_fps());

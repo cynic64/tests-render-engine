@@ -50,7 +50,7 @@ impl OrbitCamera {
         let up = vec3(0.0, 1.0, 0.0);
         let world_up = vec3(0.0, 1.0, 0.0);
         let mouse_sens = 0.0007;
-        let orbit_distance = 4.0;
+        let orbit_distance = 20.0;
 
         let view_mat: CameraMatrix = Mat4::identity().into();
         let proj_mat: CameraMatrix = Mat4::identity().into();
