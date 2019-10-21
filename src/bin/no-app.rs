@@ -8,14 +8,16 @@ Why do I have to manage queue and device? :(
 use re::collection_cache::pds_for_buffers;
 use re::render_passes;
 use re::system::{Pass, System};
-use re::utils::{bufferize_data, ObjectSpec};
+use re::utils::bufferize_data;
+use re::mesh::ObjectSpec;
 use re::window::Window;
 
 use nalgebra_glm::*;
 
 use std::collections::HashMap;
 
-use tests_render_engine::*;
+use tests_render_engine::{OrbitCamera, relative_path};
+use tests_render_engine::mesh::load_obj;
 
 fn main() {
     // initialize window
@@ -35,7 +37,7 @@ fn main() {
         "color",
     );
 
-    window.set_render_pass(render_pass);
+    window.set_render_pass(render_pass.clone());
 
     // create buffer for model matrix
     let model_data: [[f32; 4]; 4] = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
@@ -45,7 +47,7 @@ fn main() {
     let mut camera = OrbitCamera::default();
 
     // load mesh and create objec
-    let mesh = load_obj(&relative_path("meshes/raptor.obj"));
+    let mesh = load_obj(&relative_path("meshes/dragon.obj"));
     let mut object = ObjectSpec {
         vs_path: relative_path("shaders/no_app_vert.glsl"),
         fs_path: relative_path("shaders/no_app_frag.glsl"),
@@ -56,7 +58,7 @@ fn main() {
 
     // used in main loop
     let mut all_objects = HashMap::new();
-    let pipeline = system.pipeline_for_spec(0, &object.pipeline_spec);    // 0 is the pass idx
+    let pipeline = object.pipeline_spec.concrete(device.clone(), render_pass.clone());
 
     while !window.update() {
         // update camera and camera buffer
@@ -70,19 +72,7 @@ fn main() {
         all_objects.insert("geometry", vec![object.clone()]);
 
         // draw
-        // TODO: maybe make system take a mut pointer to window instead?
-        let swapchain_image = window.next_image();
-        let swapchain_fut = window.get_future();
-
-        // draw_frame returns a future representing the completion of rendering
-        let frame_fut = system.draw_frame(
-            swapchain_image.dimensions(),
-            all_objects.clone(),
-            swapchain_image,
-            swapchain_fut,
-        );
-
-        window.present_future(frame_fut);
+        system.render_to_window(&mut window, all_objects.clone());
     }
 
     println!("FPS: {}", window.get_fps());

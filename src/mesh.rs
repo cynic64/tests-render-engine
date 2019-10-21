@@ -21,7 +21,12 @@ pub fn load_obj(path: &Path) -> Mesh<PosTexNorm> {
             mesh.normals[i * 3 + 1],
             mesh.normals[i * 3 + 2],
         ];
-        let tex_coord = [mesh.texcoords[i * 2], mesh.texcoords[i * 2 + 1] * -1.0];
+        let tex_coord = if mesh.texcoords.len() <= i * 2 + 1 {
+            [0.0, 0.0]
+        } else {
+            [mesh.texcoords[i * 2], mesh.texcoords[i * 2 + 1] * -1.0]
+        };
+
         let vertex = PosTexNorm {
             position: pos,
             tex_coord,
