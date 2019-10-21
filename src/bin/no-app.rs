@@ -46,7 +46,7 @@ fn main() {
     // initialize camera
     let mut camera = OrbitCamera::default();
 
-    // load mesh and create objec
+    // load mesh and create object
     let mesh = load_obj(&relative_path("meshes/dragon.obj"));
     let mut object = ObjectSpec {
         vs_path: relative_path("shaders/no_app_vert.glsl"),

@@ -12,7 +12,7 @@ layout(set = 0, binding = 0) uniform Model {
   mat4 model;
 } model;
 
-layout(set = 0, binding = 1) uniform Camera {
+layout(set = 1, binding = 0) uniform Camera {
   mat4 view;
   mat4 proj;
   vec3 pos;
