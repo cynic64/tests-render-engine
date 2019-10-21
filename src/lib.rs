@@ -152,6 +152,144 @@ impl OrbitCamera {
     }
 }
 
+pub struct FlyCamera {
+    pub position: Vec3,
+    pub front: Vec3,
+    up: Vec3,
+    right: Vec3,
+    world_up: Vec3,
+    // pitch and yaw are in radians
+    pub pitch: f32,
+    pub yaw: f32,
+    movement_speed: f32,
+    mouse_sens: f32,
+    view_mat: CameraMatrix,
+    proj_mat: CameraMatrix,
+}
+
+impl FlyCamera {
+    pub fn default() -> Self {
+        let position = vec3(0.0, 0.0, 0.0);
+        let pitch: f32 = 0.0;
+        let yaw: f32 = std::f32::consts::PI / 2.0;
+        let front = normalize(&vec3(
+            pitch.cos() * yaw.cos(),
+            pitch.sin(),
+            pitch.cos() * yaw.sin(),
+        ));
+        let right = vec3(0.0, 0.0, 0.0);
+        let up = vec3(0.0, 1.0, 0.0);
+        let world_up = vec3(0.0, 1.0, 0.0);
+        let movement_speed = 20.0;
+        let mouse_sens = 0.0007;
+
+        Self {
+            position,
+            front,
+            up,
+            right,
+            world_up,
+            pitch,
+            yaw,
+            movement_speed,
+            mouse_sens,
+            view_mat: Mat4::identity().into(),
+            proj_mat: Mat4::identity().into(),
+        }
+    }
+
+    pub fn move_forward(&mut self, delta: f32) {
+        self.position += self.front * self.movement_speed * delta;
+    }
+
+    pub fn move_backward(&mut self, delta: f32) {
+        self.position -= self.front * self.movement_speed * delta;
+    }
+
+    pub fn move_left(&mut self, delta: f32) {
+        self.position -= self.right * self.movement_speed * delta;
+    }
+
+    pub fn move_right(&mut self, delta: f32) {
+        self.position += self.right * self.movement_speed * delta;
+    }
+
+    pub fn update(&mut self, frame_info: FrameInfo) {
+        let x = frame_info.mouse_movement[0];
+        let y = frame_info.mouse_movement[1];
+
+        self.pitch -= y * self.mouse_sens;
+        self.yaw += x * self.mouse_sens;
+        let halfpi = std::f32::consts::PI / 2.0;
+        let margin = 0.01;
+        let max_pitch = halfpi - margin;
+
+        if self.pitch > max_pitch {
+            self.pitch = max_pitch;
+        } else if self.pitch < -max_pitch {
+            self.pitch = -max_pitch;
+        }
+
+        // move if keys are down
+        if frame_info.keys_down.w {
+            self.move_forward(frame_info.delta);
+        }
+        if frame_info.keys_down.a {
+            self.move_left(frame_info.delta);
+        }
+        if frame_info.keys_down.s {
+            self.move_backward(frame_info.delta);
+        }
+        if frame_info.keys_down.d {
+            self.move_right(frame_info.delta);
+        }
+
+        // update front and right
+        self.front = normalize(&vec3(
+            self.pitch.cos() * self.yaw.cos(),
+            self.pitch.sin(),
+            self.pitch.cos() * self.yaw.sin(),
+        ));
+
+        self.right = normalize(&Vec3::cross(&self.front, &self.world_up));
+
+        self.view_mat = look_at(
+            &self.position,
+            &(self.position + self.front),
+            &self.up,
+        )
+            .into();
+
+        let dims = frame_info.dimensions;
+        let aspect_ratio = (dims[0] as f32) / (dims[1] as f32);
+        // TODO: idk why i have to flip it vertically
+        self.proj_mat = scale(
+            &perspective(
+                aspect_ratio,
+                // fov
+                1.0,
+                // near
+                0.1,
+                // far
+                10_000.,
+            ),
+            &vec3(1.0, -1.0, 1.0),
+        )
+            .into();
+    }
+
+    pub fn get_buffer(&self, queue: Arc<Queue>) -> Arc<dyn BufferAccess + Send + Sync> {
+        bufferize_data(
+            queue,
+            CameraData {
+                view: self.view_mat,
+                proj: self.proj_mat,
+                pos: self.position.into(),
+            },
+        )
+    }
+}
+
 #[allow(dead_code)]
 struct CameraData {
     view: CameraMatrix,

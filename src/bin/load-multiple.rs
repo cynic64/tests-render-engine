@@ -13,9 +13,11 @@ use re::system::{Pass, RenderableObject, System};
 use re::utils::{bufferize_data, load_texture};
 use re::window::Window;
 use re::PrimitiveTopology;
+use re::input::get_elapsed;
 
 use vulkano::device::Queue;
 use vulkano::framebuffer::RenderPassAbstract;
+use vulkano::format::Format;
 
 use nalgebra_glm as glm;
 
@@ -24,8 +26,8 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::Arc;
 
-use tests_render_engine::mesh::PosTexNorm;
-use tests_render_engine::{default_sampler, relative_path, OrbitCamera};
+use tests_render_engine::mesh::{PosTexNorm, PosTexNormTan, add_tangents};
+use tests_render_engine::{default_sampler, relative_path, FlyCamera};
 
 fn main() {
     // initialize window
@@ -53,7 +55,7 @@ fn main() {
     window.set_render_pass(render_pass.clone());
 
     // initialize camera
-    let mut camera = OrbitCamera::default();
+    let mut camera = FlyCamera::default();
 
     // load objects
     let mut objects = load_objects(
@@ -92,7 +94,10 @@ fn main() {
         all_objects.insert("geometry", objects.clone());
 
         // draw
+        let st = std::time::Instant::now();
         system.render_to_window(&mut window, all_objects.clone());
+        println!("grand total: {}ms", 1_000.0 * get_elapsed(st));
+        println!();
     }
 
     println!("FPS: {}", window.get_fps());
@@ -105,12 +110,12 @@ fn load_objects(
 ) -> Vec<RenderableObject> {
     // create buffer for model matrix, used for all
     let model_data: [[f32; 4]; 4] =
-        glm::translate(&glm::Mat4::identity().into(), &glm::vec3(0.0, -6.0, 0.0)).into();
+        glm::scale(&glm::Mat4::identity().into(), &glm::vec3(0.1, 0.1, 0.1)).into();
     let model_buffer = bufferize_data(queue.clone(), model_data);
 
     // create concrete pipeline, used to create descriptor sets for all_objects
     let vtype = VertexType {
-        phantom: PhantomData::<PosTexNorm>,
+        phantom: PhantomData::<PosTexNormTan>,
     };
     let pipeline_spec = PipelineSpec {
         vs_path: relative_path("shaders/load-multiple/basic_vert.glsl"),
@@ -124,7 +129,7 @@ fn load_objects(
     // load
     let obj = tobj::load_obj(path).unwrap();
     let raw_meshes: Vec<tobj::Mesh> = obj.0.iter().map(|model| model.mesh.clone()).collect();
-    let meshes: Vec<(Mesh<PosTexNorm>, usize)> = raw_meshes
+    let meshes: Vec<(Mesh<PosTexNormTan>, usize)> = raw_meshes
         .iter()
         .map(|mesh| (convert_mesh(mesh), mesh.material_id.unwrap_or(0)))
         .collect();
@@ -151,14 +156,28 @@ fn load_objects(
     let textures: Vec<_> = raw_materials
         .iter()
         .map(|mat| {
-            let path = if mat.diffuse_texture == "" {
+            let diff_path = if mat.diffuse_texture == "" {
                 relative_path("textures/missing.png")
             } else {
                 relative_path(&format!("meshes/sponza/{}", mat.diffuse_texture))
             };
 
-            let tex = load_texture(queue.clone(), &path);
-            pds_for_images(sampler.clone(), pipeline.clone(), &[tex], 1).unwrap()
+            let spec_path = if mat.specular_texture == "" {
+                relative_path("textures/missing-spec.png")
+            } else {
+                relative_path(&format!("meshes/sponza/{}", mat.specular_texture))
+            };
+
+            let normal_path = if mat.normal_texture == "" {
+                relative_path("textures/missing.png")
+            } else {
+                relative_path(&format!("meshes/sponza/{}", mat.normal_texture))
+            };
+
+            let diff_tex = load_texture(queue.clone(), &diff_path, Format::R8G8B8A8Srgb);
+            let spec_tex = load_texture(queue.clone(), &spec_path, Format::R8G8B8A8Unorm);
+            let norm_tex = load_texture(queue.clone(), &normal_path, Format::R8G8B8A8Unorm);
+            pds_for_images(sampler.clone(), pipeline.clone(), &[diff_tex, spec_tex, norm_tex], 1).unwrap()
         })
         .collect();
 
@@ -187,7 +206,7 @@ fn load_objects(
         .collect()
 }
 
-fn convert_mesh(mesh: &tobj::Mesh) -> Mesh<PosTexNorm> {
+fn convert_mesh(mesh: &tobj::Mesh) -> Mesh<PosTexNormTan> {
     let mut vertices = vec![];
     for i in 0..mesh.positions.len() / 3 {
         let position = [
@@ -203,7 +222,7 @@ fn convert_mesh(mesh: &tobj::Mesh) -> Mesh<PosTexNorm> {
         let tex_coord = if mesh.texcoords.len() <= i * 2 + 1 {
             [0.0, 0.0]
         } else {
-            [mesh.texcoords[i * 2], mesh.texcoords[i * 2 + 1]]
+            [mesh.texcoords[i * 2], mesh.texcoords[i * 2 + 1] * -1.0]
         };
 
         vertices.push(PosTexNorm {
@@ -213,10 +232,12 @@ fn convert_mesh(mesh: &tobj::Mesh) -> Mesh<PosTexNorm> {
         });
     }
 
-    Mesh {
+    let base_mesh = Mesh {
         vertices,
         indices: mesh.indices.clone(),
-    }
+    };
+
+    add_tangents(&base_mesh)
 }
 
 #[allow(dead_code)]

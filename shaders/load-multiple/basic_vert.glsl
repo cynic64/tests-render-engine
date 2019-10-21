@@ -3,10 +3,12 @@
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec2 tex_coord;
 layout(location = 2) in vec3 normal;
+layout(location = 3) in vec3 tangent;
 
-layout(location = 0) out vec3 v_pos;
-layout(location = 1) out vec2 v_tex_coord;
-layout(location = 2) out vec3 v_normal;
+layout(location = 0) out vec2 v_tex_coord;
+layout(location = 1) out vec3 tan_light_pos;
+layout(location = 2) out vec3 tan_cam_pos;
+layout(location = 3) out vec3 tan_frag_pos;
 
 layout(set = 0, binding = 0) uniform Material {
   vec3 ambient;
@@ -20,6 +22,8 @@ layout(set = 0, binding = 1) uniform Model {
 } model;
 
 layout(set = 1, binding = 0) uniform sampler2D diffuse_map;
+layout(set = 1, binding = 1) uniform sampler2D specular_map;
+layout(set = 1, binding = 2) uniform sampler2D normal_map;
 
 layout(set = 2, binding = 0) uniform Camera {
   mat4 view;
@@ -28,8 +32,13 @@ layout(set = 2, binding = 0) uniform Camera {
 } camera;
 
 void main() {
-  v_pos = vec3(model.model * vec4(position, 1.0));
-  gl_Position = camera.proj * camera.view * vec4(v_pos, 1.0);
   v_tex_coord = tex_coord;
-  v_normal = normal;
+  vec3 pos = vec3(model.model * vec4(position, 1.0));
+  gl_Position = camera.proj * camera.view * vec4(pos, 1.0);
+
+  vec3 bitangent = cross(tangent, normal);
+  mat3 TBN = transpose(mat3(tangent, bitangent, normal));
+  tan_light_pos = TBN * vec3(0.0, 20.0, 0.0);
+  tan_cam_pos = TBN * camera.pos;
+  tan_frag_pos = TBN * pos;
 }
