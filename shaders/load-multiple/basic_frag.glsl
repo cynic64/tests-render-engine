@@ -38,7 +38,7 @@ void main() {
   vec3 normal = texture(normal_map, v_tex_coord).rgb * 2.0 - 1.0;
 
   // ambient
-  vec3 ambient = tex_diffuse.rgb * 0.2;
+  vec3 ambient = tex_diffuse.rgb * 0.1;
 
   // diffuse
   vec3 light_dir = normalize(tan_light_pos - tan_frag_pos);
@@ -50,10 +50,11 @@ void main() {
   vec3 view_dir = normalize(tan_cam_pos - tan_frag_pos);
   vec3 halfway_dir = normalize(light_dir + view_dir);
   float spec = pow(max(dot(normal, halfway_dir), 0.0), material.shininess.r);
-  vec3 specular = tex_specular * spec;
+  vec3 specular = material.specular * spec;
 
   // result
-  vec3 result = ambient + diffuse + specular;
+  float dist = length(tan_light_pos - tan_frag_pos);
+  vec3 result = (diffuse + specular) / (dist * dist / 500.0);
 
   // gamma correction
   float gamma = 2.2;

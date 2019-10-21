@@ -13,7 +13,6 @@ use re::system::{Pass, RenderableObject, System};
 use re::utils::{bufferize_data, load_texture};
 use re::window::Window;
 use re::PrimitiveTopology;
-use re::input::get_elapsed;
 
 use vulkano::device::Queue;
 use vulkano::framebuffer::RenderPassAbstract;
@@ -94,10 +93,7 @@ fn main() {
         all_objects.insert("geometry", objects.clone());
 
         // draw
-        let st = std::time::Instant::now();
         system.render_to_window(&mut window, all_objects.clone());
-        println!("grand total: {}ms", 1_000.0 * get_elapsed(st));
-        println!();
     }
 
     println!("FPS: {}", window.get_fps());
