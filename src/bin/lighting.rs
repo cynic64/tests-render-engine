@@ -53,9 +53,9 @@ fn main() {
 
     let mut light = Light {
         position: [10.0, 0.0, 0.0, 0.0],
-        ambient: [0.2, 0.2, 0.2, 0.0],
-        diffuse: [0.8, 0.8, 0.8, 0.0],
-        specular: [1.0, 1.0, 1.0, 0.0],
+        ambient: [0.3, 0.3, 0.3, 0.0],
+        diffuse: [1.3, 1.3, 1.3, 0.0],
+        specular: [1.5, 1.5, 1.5, 0.0],
     };
 
     // TODO: implement Copy for queue?
