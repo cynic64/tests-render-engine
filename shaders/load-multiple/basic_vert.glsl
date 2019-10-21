@@ -8,11 +8,20 @@ layout(location = 0) out vec3 v_pos;
 layout(location = 1) out vec2 v_tex_coord;
 layout(location = 2) out vec3 v_normal;
 
-layout(set = 0, binding = 0) uniform Model {
+layout(set = 0, binding = 0) uniform Material {
+  vec3 ambient;
+  vec3 diffuse;
+  vec3 specular;
+  vec3 shininess;
+} material;
+
+layout(set = 0, binding = 1) uniform Model {
   mat4 model;
 } model;
 
-layout(set = 1, binding = 0) uniform Camera {
+layout(set = 1, binding = 0) uniform sampler2D diffuse_map;
+
+layout(set = 2, binding = 0) uniform Camera {
   mat4 view;
   mat4 proj;
   vec3 pos;
