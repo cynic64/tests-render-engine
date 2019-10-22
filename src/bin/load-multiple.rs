@@ -5,7 +5,7 @@ use re::mesh::Mesh;
 use tobj;
 
 use re::collection_cache::{pds_for_buffers, pds_for_images};
-use re::mesh::ObjectSpec;
+use re::mesh::RenderableObjectSpec;
 use re::mesh::VertexType;
 use re::pipeline_cache::PipelineSpec;
 use re::render_passes;
@@ -181,11 +181,9 @@ fn load_objects(
     meshes
         .iter()
         .map(|(mesh, material_idx)| {
-            ObjectSpec {
-                vs_path: relative_path("shaders/load-multiple/basic_vert.glsl"),
-                fs_path: relative_path("shaders/load-multiple/basic_frag.glsl"),
+            RenderableObjectSpec {
+                pipeline_spec: pipeline_spec.clone(),
                 mesh: mesh.clone(),
-                depth_buffer: true,
                 custom_sets: vec![
                     pds_for_buffers(
                         pipeline.clone(),
