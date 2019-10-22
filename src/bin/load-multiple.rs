@@ -257,10 +257,10 @@ impl MovingLight {
     }
 
     fn get_buffer(&self, queue: Arc<Queue>) -> Arc<dyn BufferAccess + Send + Sync> {
-        let time = get_elapsed(self.start_time) / 4.0;
+        let time = get_elapsed(self.start_time);
         let distance = 50.0;
         bufferize_data(queue.clone(), Light {
-            position: [time.sin() * distance, 20.0, time.cos() * distance, 0.0],
+            position: [(time / 4.0).sin() * distance, (time / 8.0).sin() * distance, (time / 3.0).sin() * distance, 0.0],
             power: 2.0,
         })
     }
