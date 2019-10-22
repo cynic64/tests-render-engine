@@ -385,7 +385,6 @@ impl MovingLight {
             (time / 3.0).sin() * distance,
             0.0,
         ];
-        dbg![self.position];
         self.position = [0.0, 10.0, 10.0, 0.0];
     }
 

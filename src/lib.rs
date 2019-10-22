@@ -72,18 +72,21 @@ impl OrbitCamera {
 
     pub fn update(&mut self, frame_info: FrameInfo) {
         // check for scroll wheel
-        let scroll: f32 = frame_info.all_events.iter().map(|ev| match ev {
-            winit::Event::WindowEvent {
-                event: winit::WindowEvent::MouseWheel {
-                    delta: winit::MouseScrollDelta::LineDelta(_, y),
+        let scroll: f32 = frame_info
+            .all_events
+            .iter()
+            .map(|ev| match ev {
+                winit::Event::WindowEvent {
+                    event:
+                        winit::WindowEvent::MouseWheel {
+                            delta: winit::MouseScrollDelta::LineDelta(_, y),
+                            ..
+                        },
                     ..
-                },
-                ..
-            } => {
-                *y
-            },
-            _ => 0.0,
-        }).sum();
+                } => *y,
+                _ => 0.0,
+            })
+            .sum();
 
         self.orbit_distance += scroll;
 
@@ -253,12 +256,7 @@ impl FlyCamera {
 
         self.right = normalize(&Vec3::cross(&self.front, &self.world_up));
 
-        self.view_mat = look_at(
-            &self.position,
-            &(self.position + self.front),
-            &self.up,
-        )
-            .into();
+        self.view_mat = look_at(&self.position, &(self.position + self.front), &self.up).into();
 
         let dims = frame_info.dimensions;
         let aspect_ratio = (dims[0] as f32) / (dims[1] as f32);
@@ -275,7 +273,7 @@ impl FlyCamera {
             ),
             &vec3(1.0, -1.0, 1.0),
         )
-            .into();
+        .into();
     }
 
     pub fn get_buffer(&self, queue: Arc<Queue>) -> Arc<dyn BufferAccess + Send + Sync> {

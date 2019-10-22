@@ -84,5 +84,5 @@ void main() {
   float gamma = 2.2;
   result.rgb = pow(result.rgb, vec3(1.0/gamma));
 
-  f_color = vec4(vec3(shadow), 1.0);
+  f_color = vec4(result, 1.0);
 }
