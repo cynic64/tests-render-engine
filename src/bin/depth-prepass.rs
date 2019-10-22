@@ -14,6 +14,7 @@ use re::system::{Pass, RenderableObject, System};
 use re::utils::{bufferize_data, load_texture};
 use re::window::Window;
 use re::PrimitiveTopology;
+use re::input::VirtualKeyCode;
 
 use vulkano::buffer::BufferAccess;
 use vulkano::device::Queue;
@@ -36,30 +37,26 @@ fn main() {
     let device = queue.device().clone();
 
     // create system
-    let render_pass = render_passes::multisampled_with_depth(device.clone(), 4);
+    let render_pass = render_passes::multisampled(device.clone(), 4);
     let depth_rpass = render_passes::only_depth(device.clone());
     let depth_view_rpass = render_passes::basic(device.clone());
     let mut system = System::new(
         queue.clone(),
         vec![
-            /*
-            Pass {
-                name: "geometry",
-                images_created_tags: vec![
-                    "resolve_color",
-                    "multisampled_color",
-                    "multisampled_depth",
-                    "resolve_depth",
-                ],
-                images_needed_tags: vec![],
-                render_pass: render_pass.clone(),
-            },
-            */
             Pass {
                 name: "depth",
                 images_created_tags: vec!["depth"],
                 images_needed_tags: vec![],
                 render_pass: depth_rpass.clone(),
+            },
+            Pass {
+                name: "geometry",
+                images_created_tags: vec![
+                    "resolve_color",
+                    "multisampled_color",
+                ],
+                images_needed_tags: vec!["depth"],
+                render_pass: render_pass.clone(),
             },
             Pass {
                 name: "depth_view",
@@ -68,7 +65,7 @@ fn main() {
                 render_pass: depth_view_rpass.clone(),
             },
         ],
-        "depth_view",
+        "resolve_color",
     );
 
     window.set_render_pass(depth_view_rpass.clone());
@@ -136,6 +133,8 @@ fn main() {
     let model_buf = bufferize_data(queue.clone(), model_mat);
     let model_set = pds_for_buffers(depth_pipeline.clone(), &[model_buf], 0).unwrap();
 
+    let mut debug = false;
+
     while !window.update() {
         // update camera and light
         camera.update(window.get_frame_info());
@@ -143,7 +142,9 @@ fn main() {
 
         let light_buffer = light.get_buffer(queue.clone());
         let camera_light_set =
-            pds_for_buffers(depth_pipeline.clone(), &[camera_buffer, light_buffer], 1).unwrap(); // 0 is the descriptor set idx
+            pds_for_buffers(depth_pipeline.clone(), &[camera_buffer.clone(), light_buffer.clone()], 1).unwrap(); // 0 is the descriptor set idx
+        // let camera_light_set_for_objects =
+        //     pds_for_buffers(pipeline.clone(), &[camera_buffer, light_buffer], 3).unwrap(); // 0 is the descriptor set idx
 
         all_objects.insert(
             "depth",
@@ -164,6 +165,32 @@ fn main() {
                 })
                 .collect(),
         );
+
+        all_objects.insert(
+            "geometry",
+            objects
+                .clone()
+                .iter_mut()
+                .map(|obj| {
+                    // add camera set to each object before adding it to the scene
+                    obj.custom_sets.push(camera_light_set.clone());
+                    obj.clone()
+                })
+                .collect(),
+        );
+
+        if window
+            .get_frame_info()
+            .keydowns
+            .contains(&VirtualKeyCode::C)
+        {
+            debug = !debug;
+            if debug {
+                system.output_tag = "depth_view";
+            } else {
+                system.output_tag = "resolve_color";
+            }
+        }
 
         // draw
         system.render_to_window(&mut window, all_objects.clone());
@@ -190,7 +217,7 @@ fn load_objects(
         vs_path: relative_path("shaders/depth-prepass/object_vert.glsl"),
         fs_path: relative_path("shaders/depth-prepass/object_frag.glsl"),
         fill_type: PrimitiveTopology::TriangleList,
-        depth: true,
+        depth: false,
         vtype: Arc::new(vtype),
     };
     let pipeline = pipeline_spec.concrete(queue.device().clone(), render_pass);
@@ -250,7 +277,7 @@ fn load_objects(
                 sampler.clone(),
                 pipeline.clone(),
                 &[diff_tex, spec_tex, norm_tex],
-                1,
+                2,
             )
             .unwrap()
         })
@@ -267,7 +294,7 @@ fn load_objects(
                     pds_for_buffers(
                         pipeline.clone(),
                         &[materials[*material_idx].clone(), model_buffer.clone()],
-                        0,
+                        1,
                     )
                     .unwrap(),
                     textures[*material_idx].clone(),

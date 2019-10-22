@@ -10,28 +10,30 @@ layout(location = 1) out vec3 tan_light_pos;
 layout(location = 2) out vec3 tan_cam_pos;
 layout(location = 3) out vec3 tan_frag_pos;
 
-layout(set = 0, binding = 0) uniform Material {
+layout(set = 0, binding = 0) uniform sampler2D depth_map;
+
+layout(set = 1, binding = 0) uniform Material {
   vec3 ambient;
   vec3 diffuse;
   vec3 specular;
   vec3 shininess;
 } material;
 
-layout(set = 0, binding = 1) uniform Model {
+layout(set = 1, binding = 1) uniform Model {
   mat4 model;
 } model;
 
-layout(set = 1, binding = 0) uniform sampler2D diffuse_map;
-layout(set = 1, binding = 1) uniform sampler2D specular_map;
-layout(set = 1, binding = 2) uniform sampler2D normal_map;
+layout(set = 2, binding = 0) uniform sampler2D diffuse_map;
+layout(set = 2, binding = 1) uniform sampler2D specular_map;
+layout(set = 2, binding = 2) uniform sampler2D normal_map;
 
-layout(set = 2, binding = 0) uniform Camera {
+layout(set = 3, binding = 0) uniform Camera {
   mat4 view;
   mat4 proj;
   vec3 pos;
 } camera;
 
-layout(set = 2, binding = 1) uniform Light {
+layout(set = 3, binding = 1) uniform Light {
   vec3 position;
   vec3 strength; // vec3 really means float, idk why it doesn't work
 } light;

@@ -7,33 +7,47 @@ layout(location = 3) in vec3 tan_frag_pos;
 
 layout(location = 0) out vec4 f_color;
 
-layout(set = 0, binding = 0) uniform Material {
+layout(set = 0, binding = 0) uniform sampler2D depth_map;
+
+layout(set = 1, binding = 0) uniform Material {
   vec3 ambient;
   vec3 diffuse;
   vec3 specular;
   vec3 shininess;
 } material;
 
-layout(set = 0, binding = 1) uniform Model {
+layout(set = 1, binding = 1) uniform Model {
   mat4 model;
 } model;
 
-layout(set = 1, binding = 0) uniform sampler2D diffuse_map;
-layout(set = 1, binding = 1) uniform sampler2D specular_map;
-layout(set = 1, binding = 2) uniform sampler2D normal_map;
+layout(set = 2, binding = 0) uniform sampler2D diffuse_map;
+layout(set = 2, binding = 1) uniform sampler2D specular_map;
+layout(set = 2, binding = 2) uniform sampler2D normal_map;
 
-layout(set = 2, binding = 0) uniform Camera {
+layout(set = 3, binding = 0) uniform Camera {
   mat4 view;
   mat4 proj;
   vec3 pos;
 } camera;
 
-layout(set = 2, binding = 1) uniform Light {
+layout(set = 3, binding = 1) uniform Light {
   vec3 position;
   vec3 strength; // vec3 really means float, idk why it doesn't work
 } light;
 
 void main() {
+  // get tex coords
+  vec2 dimensions = vec2(1920.0, 1080.0);
+  vec2 tex_coords = gl_FragCoord.xy / dimensions;
+  float depth = texture(depth_map, tex_coords).r;
+  float cur_depth = gl_FragCoord.z;
+  bool flag = false;
+
+  if (cur_depth > depth + 0.00005) {
+    discard;
+    flag = true;
+  }
+
   vec4 tex_diffuse = texture(diffuse_map, v_tex_coord);
   vec3 tex_specular = texture(specular_map, v_tex_coord).rgb;
   if (tex_diffuse.a < 0.5) {
@@ -65,5 +79,10 @@ void main() {
   float gamma = 2.2;
   result.rgb = pow(result.rgb, vec3(1.0/gamma));
 
-  f_color = vec4(result, 1.0);
+  if (flag) {
+    f_color = vec4(1.0, 0.0, 0.5, 1.0);
+  } else {
+    f_color = vec4(result, 1.0);
+  }
+  /* f_color = vec4(vec3(pow(cur_depth, 100.0)), 1.0); */
 }
