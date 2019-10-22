@@ -28,6 +28,11 @@ layout(set = 2, binding = 0) uniform Camera {
   vec3 pos;
 } camera;
 
+layout(set = 2, binding = 1) uniform Light {
+  vec3 position;
+  vec3 strength; // vec3 really means float, idk why it doesn't work
+} light;
+
 void main() {
   vec4 tex_diffuse = texture(diffuse_map, v_tex_coord);
   vec3 tex_specular = texture(specular_map, v_tex_coord).rgb;
@@ -54,7 +59,7 @@ void main() {
 
   // result
   float dist = length(tan_light_pos - tan_frag_pos);
-  vec3 result = (diffuse + specular) / (dist * dist / 500.0);
+  vec3 result = (diffuse + specular) / (dist * dist / 500.0) * light.strength.r;
 
   // gamma correction
   float gamma = 2.2;

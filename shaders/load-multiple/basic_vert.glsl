@@ -31,6 +31,11 @@ layout(set = 2, binding = 0) uniform Camera {
   vec3 pos;
 } camera;
 
+layout(set = 2, binding = 1) uniform Light {
+  vec3 position;
+  vec3 strength; // vec3 really means float, idk why it doesn't work
+} light;
+
 void main() {
   v_tex_coord = tex_coord;
   vec3 pos = vec3(model.model * vec4(position, 1.0));
@@ -38,7 +43,7 @@ void main() {
 
   vec3 bitangent = cross(tangent, normal);
   mat3 TBN = transpose(mat3(tangent, bitangent, normal));
-  tan_light_pos = TBN * vec3(0.0, 20.0, 0.0);
+  tan_light_pos = TBN * light.position;
   tan_cam_pos = TBN * camera.pos;
   tan_frag_pos = TBN * pos;
 }

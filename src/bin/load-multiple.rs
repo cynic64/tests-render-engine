@@ -13,10 +13,12 @@ use re::system::{Pass, RenderableObject, System};
 use re::utils::{bufferize_data, load_texture};
 use re::window::Window;
 use re::PrimitiveTopology;
+use re::input::get_elapsed;
 
 use vulkano::device::Queue;
 use vulkano::framebuffer::RenderPassAbstract;
 use vulkano::format::Format;
+use vulkano::buffer::BufferAccess;
 
 use nalgebra_glm as glm;
 
@@ -56,8 +58,11 @@ fn main() {
     // initialize camera
     let mut camera = FlyCamera::default();
 
+    // light
+    let light = MovingLight::new();
+
     // load objects
-    let mut objects = load_objects(
+    let objects = load_objects(
         queue.clone(),
         render_pass.clone(),
         &relative_path("meshes/sponza/sponza.obj"),
@@ -71,26 +76,18 @@ fn main() {
         .concrete(device.clone(), render_pass.clone());
 
     while !window.update() {
-        // update camera and camera buffer
+        // update camera and light
         camera.update(window.get_frame_info());
         let camera_buffer = camera.get_buffer(queue.clone());
 
-        let camera_set = pds_for_buffers(pipeline.clone(), &[camera_buffer], 2).unwrap(); // 0 is the descriptor set idx
-        objects.iter_mut().for_each(|obj| {
-            // when first loaded, the objects are given a set for the model and
-            // textures but not the camera. if this is the case, we append the
-            // camera set to that object. otherwise, overwrite the old camera
-            // set (which is at idx 2)
-            if obj.custom_sets.len() == 2 {
-                obj.custom_sets.push(camera_set.clone());
-            } else if obj.custom_sets.len() == 3 {
-                obj.custom_sets[2] = camera_set.clone();
-            } else {
-                panic!("wrong set count, noooo");
-            };
-        });
+        let light_buffer = light.get_buffer(queue.clone());
+        let camera_light_set = pds_for_buffers(pipeline.clone(), &[camera_buffer, light_buffer], 2).unwrap(); // 0 is the descriptor set idx
 
-        all_objects.insert("geometry", objects.clone());
+        all_objects.insert("geometry", objects.clone().iter_mut().map(|obj| {
+            // add camera set to each object before adding it to the scene
+            obj.custom_sets.push(camera_light_set.clone());
+            obj.clone()
+        }).collect());
 
         // draw
         system.render_to_window(&mut window, all_objects.clone());
@@ -235,10 +232,36 @@ fn convert_mesh(mesh: &tobj::Mesh) -> Mesh<PosTexNormTan> {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
 struct Material {
     ambient: [f32; 4],
     diffuse: [f32; 4],
     specular: [f32; 4],
     shininess: f32,
+}
+
+#[allow(dead_code)]
+struct Light {
+    position: [f32; 4],
+    power: f32,
+}
+
+struct MovingLight {
+    start_time: std::time::Instant,
+}
+
+impl MovingLight {
+    fn new() -> Self {
+        Self {
+            start_time: std::time::Instant::now(),
+        }
+    }
+
+    fn get_buffer(&self, queue: Arc<Queue>) -> Arc<dyn BufferAccess + Send + Sync> {
+        let time = get_elapsed(self.start_time) / 4.0;
+        let distance = 50.0;
+        bufferize_data(queue.clone(), Light {
+            position: [time.sin() * distance, 20.0, time.cos() * distance, 0.0],
+            power: 2.0,
+        })
+    }
 }
