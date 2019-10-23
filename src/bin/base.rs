@@ -12,7 +12,7 @@ use nalgebra_glm::*;
 
 use std::collections::HashMap;
 
-use tests_render_engine::mesh::load_obj;
+use tests_render_engine::mesh::load_obj_single;
 use tests_render_engine::{relative_path, OrbitCamera};
 
 fn main() {
@@ -48,7 +48,7 @@ fn main() {
     let mut camera = OrbitCamera::default();
 
     // load create pipeline spec and set for model matrix
-    let mesh = load_obj(&relative_path("meshes/dragon.obj"));
+    let mesh = load_obj_single(&relative_path("meshes/dragon.obj"));
 
     // TODO: move no-app shaders to base
     let mut object = ObjectPrototype {
