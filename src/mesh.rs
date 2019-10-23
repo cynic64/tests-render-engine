@@ -1,9 +1,20 @@
-use render_engine::mesh::Mesh;
-use std::path::Path;
+use render_engine::{RenderPass, Queue, Format};
+use render_engine::mesh::{Mesh, VertexType, PrimitiveTopology, ObjectPrototype};
+use render_engine::system::RenderableObject;
+use render_engine::utils::{bufferize_data, load_texture};
+use render_engine::pipeline_cache::PipelineSpec;
+use render_engine::collection_cache::{pds_for_buffers, pds_for_images};
 
 use nalgebra_glm::*;
 
-pub fn load_obj(path: &Path) -> Mesh<PosTexNorm> {
+use std::path::Path;
+use std::sync::Arc;
+use std::marker::PhantomData;
+
+use crate::{relative_path, default_sampler};
+
+pub fn load_obj_single(path: &Path) -> Mesh<PosTexNorm> {
+    // loads the first object in an OBJ file, without materials
     let (models, _materials) = tobj::load_obj(path).expect("Couldn't load OBJ file");
 
     // only use first mesh
@@ -123,6 +134,151 @@ fn tangent_bitangent_for_face(face: &[PosTexNorm; 3]) -> (Vec3, Vec3) {
     (tangent, bitangent)
 }
 
+pub fn load_obj(
+    queue: Queue,
+    render_pass: RenderPass,
+    path: &Path,
+) -> Vec<RenderableObject> {
+    // loads every object in an OBJ file
+    // each object has the following descriptors in custom_sets:
+    //     - set 0, binding 0: basic material properties (ambient, diffuse, etc.)
+    //     - set 0, binding 1: model matrix
+    //     - set 1, bindings 0, 1 and 2: diffuse, specular and normal textures
+
+    // create buffer for model matrix, used for all
+    // for now just scales everything down to 1/10
+    let model_data: [[f32; 4]; 4] =
+        scale(&Mat4::identity().into(), &vec3(0.1, 0.1, 0.1)).into();
+    let model_buffer = bufferize_data(queue.clone(), model_data);
+
+    // create concrete pipeline, used to create descriptor sets for all_objects
+    let vtype = VertexType {
+        phantom: PhantomData::<PosTexNormTan>,
+    };
+    let pipeline_spec = PipelineSpec {
+        vs_path: relative_path("shaders/obj-viewer/vert.glsl"),
+        fs_path: relative_path("shaders/obj-viewer/frag.glsl"),
+        fill_type: PrimitiveTopology::TriangleList,
+        depth: true,
+        vtype: Arc::new(vtype),
+    };
+    let pipeline = pipeline_spec.concrete(queue.device().clone(), render_pass);
+
+    // load
+    let obj = tobj::load_obj(path).unwrap();
+    let raw_meshes: Vec<tobj::Mesh> = obj.0.iter().map(|model| model.mesh.clone()).collect();
+    // (Mesh, material_idx)
+    let meshes: Vec<(Mesh<PosTexNormTan>, usize)> = raw_meshes
+        .iter()
+        .map(|mesh| (convert_mesh(mesh), mesh.material_id.unwrap_or(0)))
+        .collect();
+
+    // create material buffers and load textures
+    let raw_materials = obj.1;
+    let materials: Vec<_> = raw_materials
+        .iter()
+        .map(|mat| {
+            bufferize_data(
+                queue.clone(),
+                Material {
+                    ambient: [mat.ambient[0], mat.ambient[1], mat.ambient[2], 0.0],
+                    diffuse: [mat.diffuse[0], mat.diffuse[1], mat.diffuse[2], 0.0],
+                    specular: [mat.specular[0], mat.specular[1], mat.specular[2], 0.0],
+                    shininess: mat.shininess,
+                },
+            )
+        })
+        .collect();
+
+    let sampler = default_sampler(queue.device().clone());
+
+    let textures: Vec<_> = raw_materials
+        .iter()
+        .map(|mat| {
+            let diff_path = if mat.diffuse_texture == "" {
+                relative_path("textures/missing.png")
+            } else {
+                relative_path(&format!("meshes/sponza/{}", mat.diffuse_texture))
+            };
+
+            let spec_path = if mat.specular_texture == "" {
+                relative_path("textures/missing-spec.png")
+            } else {
+                relative_path(&format!("meshes/sponza/{}", mat.specular_texture))
+            };
+
+            let normal_path = if mat.normal_texture == "" {
+                relative_path("textures/missing.png")
+            } else {
+                relative_path(&format!("meshes/sponza/{}", mat.normal_texture))
+            };
+
+            let diff_tex = load_texture(queue.clone(), &diff_path, Format::R8G8B8A8Srgb);
+            let spec_tex = load_texture(queue.clone(), &spec_path, Format::R8G8B8A8Unorm);
+            let norm_tex = load_texture(queue.clone(), &normal_path, Format::R8G8B8A8Unorm);
+            pds_for_images(sampler.clone(), pipeline.clone(), &[diff_tex, spec_tex, norm_tex], 1).unwrap()
+        })
+        .collect();
+
+    // process
+    meshes
+        .iter()
+        .map(|(mesh, material_idx)| {
+            ObjectPrototype {
+                vs_path: relative_path("shaders/obj-viewer/vert.glsl"),
+                fs_path: relative_path("shaders/obj-viewer/frag.glsl"),
+                fill_type: PrimitiveTopology::TriangleList,
+                depth_buffer: true,
+                mesh: mesh.clone(),
+                custom_sets: vec![
+                    pds_for_buffers(
+                        pipeline.clone(),
+                        &[materials[*material_idx].clone(), model_buffer.clone()],
+                        0,
+                    )
+                    .unwrap(),
+                    textures[*material_idx].clone(),
+                ],
+            }
+            .into_renderable_object(queue.clone())
+        })
+        .collect()
+}
+
+fn convert_mesh(mesh: &tobj::Mesh) -> Mesh<PosTexNormTan> {
+    let mut vertices = vec![];
+    for i in 0..mesh.positions.len() / 3 {
+        let position = [
+            mesh.positions[i * 3],
+            mesh.positions[i * 3 + 1],
+            mesh.positions[i * 3 + 2],
+        ];
+        let normal = [
+            mesh.normals[i * 3],
+            mesh.normals[i * 3 + 1],
+            mesh.normals[i * 3 + 2],
+        ];
+        let tex_coord = if mesh.texcoords.len() <= i * 2 + 1 {
+            [0.0, 0.0]
+        } else {
+            [mesh.texcoords[i * 2], mesh.texcoords[i * 2 + 1] * -1.0]
+        };
+
+        vertices.push(PosTexNorm {
+            position,
+            tex_coord,
+            normal,
+        });
+    }
+
+    let base_mesh = Mesh {
+        vertices,
+        indices: mesh.indices.clone(),
+    };
+
+    add_tangents(&base_mesh)
+}
+
 #[derive(Default, Debug, Clone, Copy)]
 pub struct PosTexNorm {
     pub position: [f32; 3],
@@ -139,3 +295,11 @@ pub struct PosTexNormTan {
     pub tangent: [f32; 3],
 }
 vulkano::impl_vertex!(PosTexNormTan, position, tex_coord, normal, tangent);
+
+#[allow(dead_code)]
+struct Material {
+    ambient: [f32; 4],
+    diffuse: [f32; 4],
+    specular: [f32; 4],
+    shininess: f32,
+}

@@ -7,13 +7,11 @@ Why do I have to manage queue and device? :(
 
 use re::collection_cache::pds_for_buffers;
 use re::input::{get_elapsed, VirtualKeyCode};
-use re::mesh::{Mesh, RenderableObjectSpec, VertexType};
+use re::mesh::{Mesh, PrimitiveTopology, ObjectPrototype};
 use re::render_passes;
 use re::system::{Pass, System};
 use re::utils::{bufferize_data, load_texture};
 use re::window::Window;
-use re::PrimitiveTopology;
-use re::pipeline_cache::PipelineSpec;
 
 use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
 use vulkano::format::Format;
@@ -67,34 +65,32 @@ fn main() {
     let raptor_mesh = add_tangents(&basic_mesh);
     let normals_mesh = normals_vis(&raptor_mesh);
 
-    let mut raptor = RenderableObjectSpec {
-        pipeline_spec: PipelineSpec {
-            vs_path: relative_path("shaders/normal-mapping/object_vert.glsl"),
-            fs_path: relative_path("shaders/normal-mapping/object_frag.glsl"),
-            depth: true,
-            vtype: VertexType::<PosTexNormTan>::new(),
-            ..Default::default()
-        },
+    let mut raptor = ObjectPrototype {
+        vs_path: relative_path("shaders/normal-mapping/object_vert.glsl"),
+        fs_path: relative_path("shaders/normal-mapping/object_frag.glsl"),
+        depth_buffer: true,
+        fill_type: PrimitiveTopology::TriangleList,
         mesh: raptor_mesh,
-        ..Default::default()
+        custom_sets: vec![],
     }
-    .build(queue.clone());
+    .into_renderable_object(queue.clone());
 
-    let mut normals = RenderableObjectSpec {
-        pipeline_spec: PipelineSpec {
-            vs_path: relative_path("shaders/normal-mapping/debug_vert.glsl"),
-            fs_path: relative_path("shaders/normal-mapping/debug_frag.glsl"),
-            depth: true,
-            vtype: VertexType::<PosColor>::new(),
-            fill_type: PrimitiveTopology::LineList,
-        },
+    let mut normals = ObjectPrototype {
+        vs_path: relative_path("shaders/normal-mapping/debug_vert.glsl"),
+        fs_path: relative_path("shaders/normal-mapping/debug_frag.glsl"),
+        depth_buffer: true,
+        fill_type: PrimitiveTopology::LineList,
         mesh: normals_mesh,
-        ..Default::default()
+        custom_sets: vec![],
     }
-    .build(queue.clone());
+    .into_renderable_object(queue.clone());
 
     // textures
-    let normal_texture = load_texture(queue.clone(), &relative_path("textures/raptor-normal.png"), Format::R8G8B8A8Unorm);
+    let normal_texture = load_texture(
+        queue.clone(),
+        &relative_path("textures/raptor-normal.png"),
+        Format::R8G8B8A8Unorm,
+    );
 
     // light
     let mut light = Light {

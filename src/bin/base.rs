@@ -1,18 +1,18 @@
 use render_engine as re;
 
 use re::collection_cache::pds_for_buffers;
-use re::mesh::{RenderableObjectSpec, VertexType};
-use re::pipeline_cache::PipelineSpec;
+use re::mesh::ObjectPrototype;
 use re::render_passes;
 use re::system::{Pass, System};
 use re::utils::bufferize_data;
 use re::window::Window;
+use re::mesh::PrimitiveTopology;
 
 use nalgebra_glm::*;
 
 use std::collections::HashMap;
 
-use tests_render_engine::mesh::{load_obj, PosTexNorm};
+use tests_render_engine::mesh::load_obj;
 use tests_render_engine::{relative_path, OrbitCamera};
 
 fn main() {
@@ -49,28 +49,21 @@ fn main() {
 
     // load create pipeline spec and set for model matrix
     let mesh = load_obj(&relative_path("meshes/dragon.obj"));
-    let pipeline_spec = PipelineSpec {
+
+    // TODO: move no-app shaders to base
+    let mut object = ObjectPrototype {
         vs_path: relative_path("shaders/no-app/vert.glsl"),
         fs_path: relative_path("shaders/no-app/frag.glsl"),
-        depth: true,
-        vtype: VertexType::<PosTexNorm>::new(),
-        // TODO: make default take vtype as type param, because it is always
-        // needed
-        ..Default::default()
-    };
-
-    // needed for creating descriptor sets
-    // maybe add set creation functions to pipeline_spec or system?
-    let pipeline = pipeline_spec.concrete(device.clone(), render_pass.clone());
-    let model_set = pds_for_buffers(pipeline.clone(), &[model_buffer], 0).unwrap();
-
-    let mut object = RenderableObjectSpec {
-        pipeline_spec,
+        fill_type: PrimitiveTopology::TriangleList,
+        depth_buffer: true,
         mesh,
-        custom_sets: vec![model_set],
-        ..Default::default()
+        custom_sets: vec![],    // will be filled in later
     }
-    .build(queue.clone());
+    .into_renderable_object(queue.clone());
+
+    let pipeline = object.pipeline_spec.concrete(device.clone(), render_pass.clone());
+    let model_set = pds_for_buffers(pipeline.clone(), &[model_buffer], 0).unwrap();
+    object.custom_sets = vec![model_set];
 
     // used in main loop
     let mut all_objects = HashMap::new();
