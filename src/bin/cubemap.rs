@@ -36,7 +36,7 @@ fn main() {
             Pass {
                 name: "depth_view",
                 images_created_tags: vec!["depth_view"],
-                images_needed_tags: vec![],
+                images_needed_tags: vec!["depth"],
                 render_pass: rpass2.clone(),
                 custom_images: HashMap::new(),
             },
