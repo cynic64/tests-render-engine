@@ -7,14 +7,16 @@ Why do I have to manage queue and device? :(
 
 use re::collection_cache::pds_for_buffers;
 use re::input::{get_elapsed, VirtualKeyCode};
-use re::mesh::{Mesh, ObjectSpec};
+use re::mesh::{Mesh, RenderableObjectSpec, VertexType};
 use re::render_passes;
 use re::system::{Pass, System};
 use re::utils::{bufferize_data, load_texture};
 use re::window::Window;
 use re::PrimitiveTopology;
+use re::pipeline_cache::PipelineSpec;
 
 use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
+use vulkano::format::Format;
 
 use nalgebra_glm::*;
 
@@ -65,27 +67,34 @@ fn main() {
     let raptor_mesh = add_tangents(&basic_mesh);
     let normals_mesh = normals_vis(&raptor_mesh);
 
-    let mut raptor = ObjectSpec {
-        vs_path: relative_path("shaders/normal-mapping/object_vert.glsl"),
-        fs_path: relative_path("shaders/normal-mapping/object_frag.glsl"),
+    let mut raptor = RenderableObjectSpec {
+        pipeline_spec: PipelineSpec {
+            vs_path: relative_path("shaders/normal-mapping/object_vert.glsl"),
+            fs_path: relative_path("shaders/normal-mapping/object_frag.glsl"),
+            depth: true,
+            vtype: VertexType::<PosTexNormTan>::new(),
+            ..Default::default()
+        },
         mesh: raptor_mesh,
-        depth_buffer: true,
         ..Default::default()
     }
     .build(queue.clone());
 
-    let mut normals = ObjectSpec {
-        vs_path: relative_path("shaders/normal-mapping/debug_vert.glsl"),
-        fs_path: relative_path("shaders/normal-mapping/debug_frag.glsl"),
+    let mut normals = RenderableObjectSpec {
+        pipeline_spec: PipelineSpec {
+            vs_path: relative_path("shaders/normal-mapping/debug_vert.glsl"),
+            fs_path: relative_path("shaders/normal-mapping/debug_frag.glsl"),
+            depth: true,
+            vtype: VertexType::<PosColor>::new(),
+            fill_type: PrimitiveTopology::LineList,
+        },
         mesh: normals_mesh,
-        depth_buffer: true,
-        fill_type: PrimitiveTopology::LineList,
         ..Default::default()
     }
     .build(queue.clone());
 
     // textures
-    let normal_texture = load_texture(queue.clone(), &relative_path("textures/raptor-normal.png"));
+    let normal_texture = load_texture(queue.clone(), &relative_path("textures/raptor-normal.png"), Format::R8G8B8A8Unorm);
 
     // light
     let mut light = Light {
@@ -118,7 +127,7 @@ fn main() {
         let light_buffer = bufferize_data(queue.clone(), light.clone());
 
         // create set
-        raptor.custom_set = Some(Arc::new(
+        raptor.custom_sets = vec![Arc::new(
             PersistentDescriptorSet::start(raptor_pipe.clone(), 0)
                 .add_buffer(model_buffer.clone())
                 .unwrap()
@@ -130,7 +139,7 @@ fn main() {
                 .unwrap()
                 .build()
                 .unwrap(),
-        ));
+        )];
 
         let normals_set = pds_for_buffers(
             normals_pipe.clone(),
@@ -138,7 +147,7 @@ fn main() {
             0,
         )
         .unwrap(); // 0 is the descriptor set idx
-        normals.custom_set = Some(normals_set);
+        normals.custom_sets = vec![normals_set];
 
         if window
             .get_frame_info()

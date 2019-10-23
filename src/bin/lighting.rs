@@ -9,18 +9,20 @@ use re::input::get_elapsed;
 use re::render_passes;
 use re::system::{Pass, System};
 use re::utils::{bufferize_data, load_texture};
-use re::mesh::ObjectSpec;
+use re::mesh::{RenderableObjectSpec, VertexType};
 use re::window::Window;
+use re::pipeline_cache::PipelineSpec;
 
 // TODO: reeeeee i shouldn't have to do this
 use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
+use vulkano::format::Format;
 use nalgebra_glm::*;
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use tests_render_engine::{default_sampler, relative_path, OrbitCamera};
-use tests_render_engine::mesh::{add_tangents, load_obj};
+use tests_render_engine::mesh::{add_tangents, load_obj, PosTexNormTan};
 
 fn main() {
     // initialize window
@@ -45,7 +47,7 @@ fn main() {
         "resolve_color",
     );
 
-    window.set_render_pass(render_pass);
+    window.set_render_pass(render_pass.clone());
 
     // create buffers for model matrix, light and materials
     let model_data: [[f32; 4]; 4] = translate(&Mat4::identity(), &vec3(0.0, -6.0, 0.0)).into();
@@ -68,9 +70,9 @@ fn main() {
 
     // load texture
     let start_time = std::time::Instant::now();
-    let diffuse_texture = load_texture(queue.clone(), &relative_path("textures/raptor-diffuse.png"));
-    let specular_texture = load_texture(queue.clone(), &relative_path("textures/raptor-specular.png"));
-    let normal_texture = load_texture(queue.clone(), &relative_path("textures/raptor-normal.png"));
+    let diffuse_texture = load_texture(queue.clone(), &relative_path("textures/raptor-diffuse.png"), Format::R8G8B8A8Srgb);
+    let specular_texture = load_texture(queue.clone(), &relative_path("textures/raptor-specular.png"), Format::R8G8B8A8Unorm);
+    let normal_texture = load_texture(queue.clone(), &relative_path("textures/raptor-normal.png"), Format::R8G8B8A8Unorm);
     println!("Time taken to load textures: {}s", get_elapsed(start_time));
 
     // initialize camera
@@ -79,18 +81,22 @@ fn main() {
     // load mesh and create object
     let basic_mesh = load_obj(&relative_path("meshes/raptor.obj"));
     let mesh = add_tangents(&basic_mesh);
-    let mut object = ObjectSpec {
-        vs_path: relative_path("shaders/lighting/object_vert.glsl"),
-        fs_path: relative_path("shaders/lighting/object_frag.glsl"),
+    let mut object = RenderableObjectSpec {
+        pipeline_spec: PipelineSpec {
+            vs_path: relative_path("shaders/lighting/object_vert.glsl"),
+            fs_path: relative_path("shaders/lighting/object_frag.glsl"),
+            depth: true,
+            vtype: VertexType::<PosTexNormTan>::new(),
+            ..Default::default()
+        },
         mesh,
-        depth_buffer: true,
         ..Default::default()
     }
     .build(queue.clone());
 
     // used in main loop
     let mut all_objects = HashMap::new();
-    let pipeline = system.pipeline_for_spec(0, &object.pipeline_spec); // 0 is the pass idx
+    let pipeline = object.pipeline_spec.concrete(device.clone(), render_pass.clone());
     let start_time = std::time::Instant::now();
     let sampler = default_sampler(device.clone());
 
@@ -106,7 +112,7 @@ fn main() {
         light.position = [light_x, 0.0, light_z, 0.0];
         let light_buffer = bufferize_data(queue.clone(), light.clone());
 
-        object.custom_set = Some(Arc::new(
+        object.custom_sets = vec![Arc::new(
             PersistentDescriptorSet::start(pipeline.clone(), 0)
                 .add_buffer(model_buffer.clone())
                 .unwrap()
@@ -124,7 +130,7 @@ fn main() {
                 .unwrap()
                 .build()
                 .unwrap(),
-        ));
+        )];
 
         all_objects.insert("geometry", vec![object.clone()]);
 

@@ -58,5 +58,9 @@ void main() {
     // result
     vec3 result = ambient + diffuse + specular;
 
+    // gamma correction
+    float gamma = 2.2;
+    result.rgb = pow(result.rgb, vec3(1.0/gamma));
+
     f_color = vec4(result, 1.0);
 }
