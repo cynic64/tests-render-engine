@@ -1,7 +1,7 @@
 #version 450
 
 layout(location = 0) in vec2 v_tex_coord;
-layout(location = 1) in vec3 tan_light_pos;
+layout(location = 1) in vec3 tan_light_dir;
 layout(location = 2) in vec3 tan_cam_pos;
 layout(location = 3) in vec3 tan_frag_pos;
 
@@ -29,7 +29,7 @@ layout(set = 2, binding = 0) uniform Camera {
 } camera;
 
 layout(set = 2, binding = 1) uniform Light {
-  vec3 position;
+  vec3 direction;
   vec3 strength; // vec3 really means float, idk why it doesn't work
 } light;
 
@@ -46,7 +46,7 @@ void main() {
   vec3 ambient = tex_diffuse.rgb * 0.1;
 
   // diffuse
-  vec3 light_dir = normalize(tan_light_pos - tan_frag_pos);
+  vec3 light_dir = tan_light_dir;
 
   float diff = max(dot(normal, light_dir), 0.0);
   vec3 diffuse = diff * tex_diffuse.rgb;
@@ -58,8 +58,7 @@ void main() {
   vec3 specular = material.specular * spec;
 
   // result
-  float dist = length(tan_light_pos - tan_frag_pos);
-  vec3 result = (diffuse + specular) / (dist * dist / 500.0) * light.strength.r;
+  vec3 result = (diffuse + specular) * light.strength.r;
 
   // gamma correction
   float gamma = 2.2;

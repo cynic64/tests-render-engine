@@ -81,7 +81,7 @@ fn main() {
 
 #[allow(dead_code)]
 struct Light {
-    position: [f32; 4],
+    direction: [f32; 4],
     power: f32,
 }
 
@@ -97,11 +97,12 @@ impl MovingLight {
     }
 
     fn get_buffer(&self, queue: Queue) -> Buffer {
-        let time = get_elapsed(self.start_time);
-        let distance = 50.0;
-        bufferize_data(queue.clone(), Light {
-            position: [(time / 4.0).sin() * distance, (time / 8.0).sin() * distance, (time / 3.0).sin() * distance, 0.0],
-            power: 2.0,
-        })
+        let time = get_elapsed(self.start_time) / 4.0;
+        let data = Light {
+            direction: [time.sin(), 2.0, time.cos(), 0.0],
+            power: 1.0,
+        };
+
+        bufferize_data(queue.clone(), data)
     }
 }
