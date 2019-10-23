@@ -1,17 +1,17 @@
-use render_engine::{RenderPass, Queue, Format};
-use render_engine::mesh::{Mesh, VertexType, PrimitiveTopology, ObjectPrototype};
+use render_engine::collection_cache::{pds_for_buffers, pds_for_images};
+use render_engine::mesh::{Mesh, ObjectPrototype, PrimitiveTopology, VertexType};
+use render_engine::pipeline_cache::PipelineSpec;
 use render_engine::system::RenderableObject;
 use render_engine::utils::{bufferize_data, load_texture};
-use render_engine::pipeline_cache::PipelineSpec;
-use render_engine::collection_cache::{pds_for_buffers, pds_for_images};
+use render_engine::{Buffer, Format, Queue, RenderPass, Set};
 
 use nalgebra_glm::*;
 
+use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::Arc;
-use std::marker::PhantomData;
 
-use crate::{relative_path, default_sampler};
+use crate::{default_sampler, relative_path};
 
 pub fn load_obj_single(path: &Path) -> Mesh<PosTexNorm> {
     // loads the first object in an OBJ file, without materials
@@ -134,11 +134,7 @@ fn tangent_bitangent_for_face(face: &[PosTexNorm; 3]) -> (Vec3, Vec3) {
     (tangent, bitangent)
 }
 
-pub fn load_obj(
-    queue: Queue,
-    render_pass: RenderPass,
-    path: &Path,
-) -> Vec<RenderableObject> {
+pub fn load_obj(queue: Queue, render_pass: RenderPass, path: &Path) -> Vec<RenderableObject> {
     // loads every object in an OBJ file
     // each object has the following descriptors in custom_sets:
     //     - set 0, binding 0: basic material properties (ambient, diffuse, etc.)
@@ -146,9 +142,7 @@ pub fn load_obj(
     //     - set 1, bindings 0, 1 and 2: diffuse, specular and normal textures
 
     // create buffer for model matrix, used for all
-    // for now just scales everything down to 1/10
-    let model_data: [[f32; 4]; 4] =
-        scale(&Mat4::identity().into(), &vec3(0.1, 0.1, 0.1)).into();
+    let model_data: [[f32; 4]; 4] = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
     let model_buffer = bufferize_data(queue.clone(), model_data);
 
     // create concrete pipeline, used to create descriptor sets for all_objects
@@ -175,55 +169,77 @@ pub fn load_obj(
 
     // create material buffers and load textures
     let raw_materials = obj.1;
-    let materials: Vec<_> = raw_materials
-        .iter()
-        .map(|mat| {
-            bufferize_data(
-                queue.clone(),
-                Material {
-                    ambient: [mat.ambient[0], mat.ambient[1], mat.ambient[2], 0.0],
-                    diffuse: [mat.diffuse[0], mat.diffuse[1], mat.diffuse[2], 0.0],
-                    specular: [mat.specular[0], mat.specular[1], mat.specular[2], 0.0],
-                    shininess: mat.shininess,
-                },
-            )
-        })
-        .collect();
 
     let sampler = default_sampler(queue.device().clone());
-
-    let textures: Vec<_> = raw_materials
+    let mat_buffers_and_texture_sets: Vec<(Buffer, Set)> = raw_materials
         .iter()
         .map(|mat| {
-            let diff_path = if mat.diffuse_texture == "" {
-                relative_path("textures/missing.png")
+            // first try to load textures
+            let parent_path = path.parent().expect(&format!("couldn't get parent of path: {:?}", path));
+            let maybe_diff_path = parent_path.join(Path::new(&mat.diffuse_texture));
+            let (diff_path, diff_found) = if mat.diffuse_texture == "" || !maybe_diff_path.exists() {
+                (relative_path("textures/missing.png"), 0.0)
             } else {
-                relative_path(&format!("meshes/sponza/{}", mat.diffuse_texture))
+                (maybe_diff_path, 1.0)
             };
 
-            let spec_path = if mat.specular_texture == "" {
+            let maybe_spec_path = parent_path.join(Path::new(&mat.specular_texture));
+            let spec_path = if mat.specular_texture == "" || !maybe_spec_path.exists() {
                 relative_path("textures/missing-spec.png")
             } else {
-                relative_path(&format!("meshes/sponza/{}", mat.specular_texture))
+                maybe_spec_path
             };
 
-            let normal_path = if mat.normal_texture == "" {
-                relative_path("textures/missing.png")
+            let maybe_normal_path = parent_path.join(Path::new(&mat.normal_texture));
+            let normal_path = if mat.normal_texture == "" || !maybe_normal_path.exists() {
+                relative_path("textures/missing-normal.png")
             } else {
-                relative_path(&format!("meshes/sponza/{}", mat.normal_texture))
+                maybe_normal_path
             };
 
             let diff_tex = load_texture(queue.clone(), &diff_path, Format::R8G8B8A8Srgb);
             let spec_tex = load_texture(queue.clone(), &spec_path, Format::R8G8B8A8Unorm);
             let norm_tex = load_texture(queue.clone(), &normal_path, Format::R8G8B8A8Unorm);
-            pds_for_images(sampler.clone(), pipeline.clone(), &[diff_tex, spec_tex, norm_tex], 1).unwrap()
+            let textures_set = pds_for_images(
+                sampler.clone(),
+                pipeline.clone(),
+                &[diff_tex, spec_tex, norm_tex],
+                1,
+            )
+                .unwrap();
+
+            // sometimes shininess isn't specified and we need to provide a
+            // sensible default
+            let shininess = if mat.shininess > 1.0 {
+                mat.shininess
+            } else {
+                32.0
+            };
+
+            let material_data = Material {
+                ambient: [mat.ambient[0], mat.ambient[1], mat.ambient[2], 0.0],
+                diffuse: [mat.diffuse[0], mat.diffuse[1], mat.diffuse[2], 0.0],
+                specular: [mat.specular[0], mat.specular[1], mat.specular[2], 0.0],
+                shininess: [shininess, 0.0, 0.0, 0.0],
+                use_texture: [diff_found, 0.0, 0.0, 0.0],
+            };
+            let material_buffer: Buffer = bufferize_data(queue.clone(), material_data);
+
+            (material_buffer, textures_set)
         })
         .collect();
 
     // process
-    meshes
+    let (mut total_verts, mut total_indices) = (0, 0);
+    let objects = meshes
         .iter()
         .map(|(mesh, material_idx)| {
+            total_verts += mesh.vertices.len();
+            total_indices += mesh.indices.len();
+
+            let material_buffer = mat_buffers_and_texture_sets[*material_idx].0.clone();
+            let texture_set = mat_buffers_and_texture_sets[*material_idx].1.clone();
+
             ObjectPrototype {
                 vs_path: relative_path("shaders/obj-viewer/vert.glsl"),
                 fs_path: relative_path("shaders/obj-viewer/frag.glsl"),
@@ -233,16 +249,21 @@ pub fn load_obj(
                 custom_sets: vec![
                     pds_for_buffers(
                         pipeline.clone(),
-                        &[materials[*material_idx].clone(), model_buffer.clone()],
+                        &[material_buffer, model_buffer.clone()],
                         0,
                     )
                     .unwrap(),
-                    textures[*material_idx].clone(),
+                    texture_set,
                 ],
             }
             .into_renderable_object(queue.clone())
         })
-        .collect()
+        .collect();
+
+    println!("Total vertices: {}", total_verts);
+    println!("Total indices: {}", total_indices);
+
+    objects
 }
 
 fn convert_mesh(mesh: &tobj::Mesh) -> Mesh<PosTexNormTan> {
@@ -301,5 +322,6 @@ struct Material {
     ambient: [f32; 4],
     diffuse: [f32; 4],
     specular: [f32; 4],
-    shininess: f32,
+    shininess: [f32; 4],
+    use_texture: [f32; 4],
 }

@@ -12,6 +12,7 @@ layout(set = 0, binding = 0) uniform Material {
   vec3 diffuse;
   vec3 specular;
   vec3 shininess;
+  vec3 use_texture;
 } material;
 
 layout(set = 0, binding = 1) uniform Model {
@@ -34,16 +35,19 @@ layout(set = 2, binding = 1) uniform Light {
 } light;
 
 void main() {
-  vec4 tex_diffuse = texture(diffuse_map, v_tex_coord);
-  vec3 tex_specular = texture(specular_map, v_tex_coord).rgb;
+  // only use the texture if we should
+  vec4 tex_diffuse = material.use_texture.r > 0.5 ? texture(diffuse_map, v_tex_coord) : vec4(material.diffuse, 1.0);
+
   if (tex_diffuse.a < 0.5) {
     discard;
   }
 
+  vec3 tex_specular = texture(specular_map, v_tex_coord).rgb;
+
   vec3 normal = texture(normal_map, v_tex_coord).rgb * 2.0 - 1.0;
 
   // ambient
-  vec3 ambient = tex_diffuse.rgb * 0.1;
+  vec3 ambient = tex_diffuse.rgb * 0.01;
 
   // diffuse
   vec3 light_dir = tan_light_dir;
@@ -58,11 +62,11 @@ void main() {
   vec3 specular = material.specular * spec;
 
   // result
-  vec3 result = (diffuse + specular) * light.strength.r;
+  vec3 result = ambient + (diffuse + specular) * light.strength.r;
 
   // gamma correction
   float gamma = 2.2;
-  result.rgb = pow(result.rgb, vec3(1.0/gamma));
+  result = pow(result, vec3(1.0/gamma));
 
   f_color = vec4(result, 1.0);
 }

@@ -15,6 +15,7 @@ layout(set = 0, binding = 0) uniform Material {
   vec3 diffuse;
   vec3 specular;
   vec3 shininess;
+  vec3 use_texture;
 } material;
 
 layout(set = 0, binding = 1) uniform Model {

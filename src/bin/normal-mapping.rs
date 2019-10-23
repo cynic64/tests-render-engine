@@ -21,7 +21,7 @@ use nalgebra_glm::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tests_render_engine::mesh::{add_tangents, load_obj, PosTexNormTan};
+use tests_render_engine::mesh::{add_tangents, load_obj_single, PosTexNormTan};
 use tests_render_engine::{default_sampler, relative_path, OrbitCamera};
 
 fn main() {
@@ -61,7 +61,7 @@ fn main() {
     let mut camera = OrbitCamera::default();
 
     // load meshes and create objects
-    let basic_mesh = load_obj(&relative_path("meshes/raptor.obj"));
+    let basic_mesh = load_obj_single(&relative_path("meshes/raptor.obj"));
     let raptor_mesh = add_tangents(&basic_mesh);
     let normals_mesh = normals_vis(&raptor_mesh);
 

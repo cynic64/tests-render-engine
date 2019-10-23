@@ -9,11 +9,22 @@ use re::window::Window;
 use re::input::get_elapsed;
 
 use std::collections::HashMap;
+use std::env;
+use std::path::Path;
 
-use tests_render_engine::{relative_path, FlyCamera};
+use tests_render_engine::FlyCamera;
 use tests_render_engine::mesh::load_obj;
 
 fn main() {
+    // get path to load_obj
+    let args: Vec<String> = env::args().collect();
+    let path = if args.len() < 2 {
+        println!("No path given to load!");
+        return;
+    } else {
+        Path::new(&args[1])
+    };
+
     // initialize window
     let (mut window, queue) = Window::new();
     let device = queue.device().clone();
@@ -48,7 +59,7 @@ fn main() {
     let objects = load_obj(
         queue.clone(),
         render_pass.clone(),
-        &relative_path("meshes/sponza/sponza.obj"),
+        path,
     );
     println!("Objects Loaded: {}", objects.len());
     let mut all_objects = HashMap::new();
