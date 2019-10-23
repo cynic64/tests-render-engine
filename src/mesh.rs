@@ -153,7 +153,8 @@ pub fn load_obj(queue: Queue, render_pass: RenderPass, path: &Path) -> Vec<Rende
         vs_path: relative_path("shaders/obj-viewer/vert.glsl"),
         fs_path: relative_path("shaders/obj-viewer/frag.glsl"),
         fill_type: PrimitiveTopology::TriangleList,
-        depth: true,
+        read_depth: true,
+        write_depth: true,
         vtype: Arc::new(vtype),
     };
     let pipeline = pipeline_spec.concrete(queue.device().clone(), render_pass);
@@ -244,7 +245,8 @@ pub fn load_obj(queue: Queue, render_pass: RenderPass, path: &Path) -> Vec<Rende
                 vs_path: relative_path("shaders/obj-viewer/vert.glsl"),
                 fs_path: relative_path("shaders/obj-viewer/frag.glsl"),
                 fill_type: PrimitiveTopology::TriangleList,
-                depth_buffer: true,
+                read_depth: true,
+                write_depth: true,
                 mesh: mesh.clone(),
                 custom_sets: vec![
                     pds_for_buffers(

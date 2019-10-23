@@ -6,7 +6,7 @@ use re::mesh::{Mesh, PrimitiveTopology};
 use re::system::{Pass, System};
 use re::utils::bufferize_data;
 use re::window::Window;
-use re::{render_passes, Format};
+use re::render_passes;
 
 use nalgebra_glm::*;
 
@@ -22,7 +22,7 @@ fn main() {
 
     // create system
     let rpass1 = render_passes::only_depth(device.clone());
-    let rpass2 = render_passes::basic(device.clone());
+    let rpass2 = render_passes::read_depth(device.clone());
     let mut system = System::new(
         queue.clone(),
         vec![
@@ -33,6 +33,7 @@ fn main() {
                 render_pass: rpass1.clone(),
                 custom_images: HashMap::new(),
             },
+            /*
             Pass {
                 name: "depth_view",
                 images_created_tags: vec!["depth_view"],
@@ -40,16 +41,18 @@ fn main() {
                 render_pass: rpass2.clone(),
                 custom_images: HashMap::new(),
             },
+            */
+            Pass {
+                name: "geometry",
+                // should re-use old depth buffer
+                images_created_tags: vec!["color", "depth"],
+                images_needed_tags: vec![],
+                render_pass: rpass2.clone(),
+                custom_images: HashMap::new(),
+            },
         ],
-        "depth_view",
+        "color",
     );
-
-    let custom_depth = vulkano::image::AttachmentImage::sampled_multisampled(device.clone(), [960, 540], 1, Format::D32Sfloat)
-        .unwrap();
-    system.passes[0].custom_images.insert("depth", custom_depth);
-    let custom_color = vulkano::image::AttachmentImage::sampled_multisampled(device.clone(), [960, 540], 1, Format::B8G8R8A8Unorm)
-        .unwrap();
-    system.passes[0].custom_images.insert("color", custom_color);
 
     window.set_render_pass(rpass1.clone());
 
@@ -67,7 +70,8 @@ fn main() {
         vs_path: relative_path("shaders/depth-prepass/vert.glsl"),
         fs_path: relative_path("shaders/depth-prepass/frag.glsl"),
         fill_type: PrimitiveTopology::TriangleList,
-        depth_buffer: true,
+        read_depth: true,
+        write_depth: true,
         mesh,
         custom_sets: vec![], // will be filled in later
     }
@@ -80,11 +84,13 @@ fn main() {
     dragon.custom_sets = vec![model_set];
 
     // create fullscreen quad
+    /*
     let fullscreen = ObjectPrototype {
         vs_path: relative_path("shaders/depth-prepass/depth_view_vert.glsl"),
         fs_path: relative_path("shaders/depth-prepass/depth_view_frag.glsl"),
         fill_type: PrimitiveTopology::TriangleStrip,
-        depth_buffer: false,
+        read_depth: false,
+        write_depth: false,
         mesh: Mesh {
             vertices: vec![
                 V2D {
@@ -105,10 +111,11 @@ fn main() {
         custom_sets: vec![],
     }
     .into_renderable_object(queue.clone());
+    */
 
     // used in main loop
     let mut all_objects = HashMap::new();
-    all_objects.insert("depth_view", vec![fullscreen]);
+    // all_objects.insert("depth_view", vec![fullscreen]);
 
     while !window.update() {
         // update camera and camera buffer
@@ -129,6 +136,11 @@ fn main() {
 
         // replace old "prepass" object list
         all_objects.insert("prepass", vec![dragon.clone()]);
+        let mut geo_dragon = dragon.clone();
+        geo_dragon.pipeline_spec.write_depth = false;
+        geo_dragon.pipeline_spec.vs_path = relative_path("shaders/depth-prepass/object_vert.glsl");
+        geo_dragon.pipeline_spec.fs_path = relative_path("shaders/depth-prepass/object_frag.glsl");
+        all_objects.insert("geometry", vec![geo_dragon]);
 
         // draw
         system.render_to_window(&mut window, all_objects.clone());
