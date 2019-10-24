@@ -45,10 +45,20 @@ fn main() {
     );
 
     /*
-    let custom_depth = vulkano::image::AttachmentImage::sampled_multisampled(device.clone(), [1024, 1024], 1, Format::D32Sfloat)
+    let custom_depth = vulkano::image::AttachmentImage::sampled_multisampled(device.clone(), [960, 540], 1, Format::D32Sfloat)
         .unwrap();
     system.passes[0].custom_images.insert("depth", custom_depth);
-    */
+    let custom_color = vulkano::image::AttachmentImage::sampled_multisampled(device.clone(), [960, 540], 1, Format::B8G8R8A8Unorm)
+        .unwrap();
+    system.passes[0].custom_images.insert("color", custom_color);
+     */
+    let cubemap_dims = vulkano::image::Dimensions::Cubemap { size: 1024 };
+    let cubemap = vulkano::image::StorageImage::new(
+        device.clone(),
+        cubemap_dims,
+        vulkano::format::Format::D32Sfloat,
+        vec![queue.family()],
+    );
 
     window.set_render_pass(rpass1.clone());
 
@@ -66,7 +76,8 @@ fn main() {
         vs_path: relative_path("shaders/cubemap/vert.glsl"),
         fs_path: relative_path("shaders/cubemap/frag.glsl"),
         fill_type: PrimitiveTopology::TriangleList,
-        depth_buffer: true,
+        read_depth: true,
+        write_depth: true,
         mesh,
         custom_sets: vec![], // will be filled in later
     }
@@ -83,7 +94,8 @@ fn main() {
         vs_path: relative_path("shaders/cubemap/depth_view_vert.glsl"),
         fs_path: relative_path("shaders/cubemap/depth_view_frag.glsl"),
         fill_type: PrimitiveTopology::TriangleStrip,
-        depth_buffer: false,
+        read_depth: false,
+        write_depth: false,
         mesh: Mesh {
             vertices: vec![
                 V2D {
