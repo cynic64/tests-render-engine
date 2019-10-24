@@ -33,6 +33,7 @@ fn main() {
                 "resolve_depth",
             ],
             images_needed_tags: vec![],
+            custom_images: HashMap::new(),
             render_pass: render_pass.clone(),
         }],
         "resolve_color",
@@ -55,7 +56,8 @@ fn main() {
         vs_path: relative_path("shaders/no-app/vert.glsl"),
         fs_path: relative_path("shaders/no-app/frag.glsl"),
         fill_type: PrimitiveTopology::TriangleList,
-        depth_buffer: true,
+        read_depth: true,
+        write_depth: true,
         mesh,
         custom_sets: vec![],    // will be filled in later
     }

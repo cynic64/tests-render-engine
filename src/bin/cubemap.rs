@@ -6,14 +6,22 @@ use re::mesh::{Mesh, PrimitiveTopology};
 use re::system::{Pass, System};
 use re::utils::bufferize_data;
 use re::window::Window;
-use re::{render_passes, Format};
+use re::{render_passes, Format, Image};
+
+use vulkano::command_buffer::DynamicState;
+use vulkano::pipeline::viewport::Viewport;
 
 use nalgebra_glm::*;
 
 use std::collections::HashMap;
+use std::path::Path;
 
 use tests_render_engine::mesh::load_obj_single;
 use tests_render_engine::{relative_path, OrbitCamera};
+
+// patches are laid out in a 3x2
+const SHADOW_MAP_DIMS: [u32; 2] = [3072, 2048];
+const PATCH_DIMS: [f32; 2] = [1024.0, 1024.0];
 
 fn main() {
     // initialize window
@@ -21,45 +29,33 @@ fn main() {
     let device = queue.device().clone();
 
     // create system
-    let rpass1 = render_passes::with_depth(device.clone());
-    let rpass2 = render_passes::basic(device.clone());
+    let patched_shadow_image: Image = vulkano::image::AttachmentImage::sampled(device.clone(), SHADOW_MAP_DIMS, Format::D32Sfloat).unwrap();
+    let mut depth_view_custom_images = HashMap::new();
+    depth_view_custom_images.insert("patched_shadow", patched_shadow_image);
+
+    let rpass1 = render_passes::only_depth(device.clone());
+    let rpass2 = render_passes::with_depth(device.clone());
     let mut system = System::new(
         queue.clone(),
         vec![
             Pass {
                 name: "geometry",
-                images_created_tags: vec!["color", "depth"],
+                images_created_tags: vec!["patched_shadow"],
                 images_needed_tags: vec![],
                 render_pass: rpass1.clone(),
                 custom_images: HashMap::new(),
             },
             Pass {
                 name: "depth_view",
-                images_created_tags: vec!["depth_view"],
-                images_needed_tags: vec!["depth"],
+                // also creates its own depth buffer
+                images_created_tags: vec!["depth_view", "depth"],
+                images_needed_tags: vec!["patched_shadow"],
                 render_pass: rpass2.clone(),
-                custom_images: HashMap::new(),
+                custom_images: depth_view_custom_images,
             },
         ],
         "depth_view",
     );
-
-    /*
-    let custom_depth = vulkano::image::AttachmentImage::sampled_multisampled(device.clone(), [960, 540], 1, Format::D32Sfloat)
-        .unwrap();
-    system.passes[0].custom_images.insert("depth", custom_depth);
-    let custom_color = vulkano::image::AttachmentImage::sampled_multisampled(device.clone(), [960, 540], 1, Format::B8G8R8A8Unorm)
-        .unwrap();
-    system.passes[0].custom_images.insert("color", custom_color);
-     */
-    let cubemap_dims = vulkano::image::Dimensions::Cubemap { size: 1024 };
-    let cubemap = vulkano::image::StorageImage::new(
-        device.clone(),
-        cubemap_dims,
-        vulkano::format::Format::D32Sfloat,
-        vec![queue.family()],
-    );
-
     window.set_render_pass(rpass1.clone());
 
     // create buffer and set for model matrix
@@ -70,7 +66,17 @@ fn main() {
     let mut camera = OrbitCamera::default();
 
     // load create pipeline spec and set for model matrix
-    let mesh = load_obj_single(&relative_path("meshes/dragon.obj"));
+    let mesh = load_obj_single(&relative_path("meshes/shadowtest.obj"));
+
+    let custom_dynstate = DynamicState {
+        line_width: None,
+        viewports: Some(vec![Viewport {
+            origin: [0.0, 0.0],
+            dimensions: PATCH_DIMS,
+            depth_range: 0.0..1.0,
+        }]),
+        scissors: None,
+    };
 
     let mut dragon = ObjectPrototype {
         vs_path: relative_path("shaders/cubemap/vert.glsl"),
@@ -80,66 +86,54 @@ fn main() {
         write_depth: true,
         mesh,
         custom_sets: vec![], // will be filled in later
+        custom_dynamic_state: Some(custom_dynstate),
     }
     .into_renderable_object(queue.clone());
 
-    let pipeline = dragon
+    let pipe_dragon = dragon
         .pipeline_spec
         .concrete(device.clone(), rpass1.clone());
-    let model_set = pds_for_buffers(pipeline.clone(), &[model_buffer], 0).unwrap();
+    let model_set = pds_for_buffers(pipe_dragon.clone(), &[model_buffer], 0).unwrap();
     dragon.custom_sets = vec![model_set];
 
-    // create fullscreen quad
-    let fullscreen = ObjectPrototype {
+    // create cube to visualize cubemap on
+    let cube_mesh = load_obj_positions_only(&relative_path("meshes/cube.obj"));
+    let cube = ObjectPrototype {
         vs_path: relative_path("shaders/cubemap/depth_view_vert.glsl"),
         fs_path: relative_path("shaders/cubemap/depth_view_frag.glsl"),
-        fill_type: PrimitiveTopology::TriangleStrip,
-        read_depth: false,
-        write_depth: false,
-        mesh: Mesh {
-            vertices: vec![
-                V2D {
-                    tex_coords: [-1.0, -1.0],
-                },
-                V2D {
-                    tex_coords: [-1.0, 1.0],
-                },
-                V2D {
-                    tex_coords: [1.0, -1.0],
-                },
-                V2D {
-                    tex_coords: [1.0, 1.0],
-                },
-            ],
-            indices: vec![0, 1, 2, 3],
-        },
+        fill_type: PrimitiveTopology::TriangleList,
+        read_depth: true,
+        write_depth: true,
+        mesh: cube_mesh,
         custom_sets: vec![],
+        custom_dynamic_state: None,
     }
     .into_renderable_object(queue.clone());
+
+    let pipe_cube = cube
+        .pipeline_spec
+        .concrete(device.clone(), rpass2.clone());
 
     // used in main loop
     let mut all_objects = HashMap::new();
-    all_objects.insert("depth_view", vec![fullscreen]);
 
     while !window.update() {
         // update camera and camera buffer
         camera.update(window.get_frame_info());
 
         let camera_buffer = camera.get_buffer(queue.clone());
-        let camera_set = pds_for_buffers(pipeline.clone(), &[camera_buffer], 1).unwrap();
+        let camera_set_dragon = pds_for_buffers(pipe_dragon.clone(), &[camera_buffer.clone()], 1).unwrap();
+        let camera_set_cube = pds_for_buffers(pipe_cube.clone(), &[camera_buffer.clone()], 1).unwrap();
 
-        // in the beginning, custom_sets only includes the model set. handle
-        // both cases.
-        if dragon.custom_sets.len() == 1 {
-            dragon.custom_sets.push(camera_set);
-        } else if dragon.custom_sets.len() == 2 {
-            dragon.custom_sets[1] = camera_set;
-        } else {
-            panic!("weird custom set length");
-        }
+        // add camera set to both passes
+        let mut cur_dragon = dragon.clone();
+        cur_dragon.custom_sets.push(camera_set_dragon);
+        let mut cur_cube = cube.clone();
+        cur_cube.custom_sets.push(camera_set_cube);
 
         // replace old "geometry" object list
-        all_objects.insert("geometry", vec![dragon.clone()]);
+        all_objects.insert("geometry", vec![cur_dragon]);
+        all_objects.insert("depth_view", vec![cur_cube]);
 
         // draw
         system.render_to_window(&mut window, all_objects.clone());
@@ -149,7 +143,37 @@ fn main() {
 }
 
 #[derive(Default, Debug, Clone, Copy)]
-struct V2D {
-    tex_coords: [f32; 2],
+struct V3D {
+    position: [f32; 3],
 }
-vulkano::impl_vertex!(V2D, tex_coords);
+vulkano::impl_vertex!(V3D, position);
+
+fn load_obj_positions_only(path: &Path) -> Mesh<V3D> {
+    // loads the first mesh in an obj file, extracting only position information
+    let (models, _materials) = tobj::load_obj(path).expect("Couldn't load OBJ file");
+
+    // only use first mesh
+    let mesh = &models[0].mesh;
+    let mut vertices: Vec<V3D> = vec![];
+
+    for i in 0..mesh.positions.len() / 3 {
+        let pos = [
+            mesh.positions[i * 3],
+            mesh.positions[i * 3 + 1],
+            mesh.positions[i * 3 + 2],
+        ];
+        let vertex = V3D {
+            position: pos,
+        };
+
+        vertices.push(vertex);
+    }
+
+    println!("Vertices: {}", vertices.len());
+    println!("Indices: {}", mesh.indices.len());
+
+    Mesh {
+        vertices,
+        indices: mesh.indices.clone(),
+    }
+}

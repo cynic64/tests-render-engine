@@ -8,7 +8,7 @@ use render_engine::{Buffer, Format, Queue, RenderPass, Set};
 use nalgebra_glm::*;
 
 use std::marker::PhantomData;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use crate::{default_sampler, relative_path};
@@ -257,6 +257,7 @@ pub fn load_obj(queue: Queue, render_pass: RenderPass, path: &Path) -> Vec<Rende
                     .unwrap(),
                     texture_set,
                 ],
+                custom_dynamic_state: None,
             }
             .into_renderable_object(queue.clone())
         })
@@ -307,6 +308,7 @@ pub fn load_obj_no_textures(queue: Queue, render_pass: RenderPass, vs_path: &Pat
             write_depth: true,
             mesh: mesh.clone(),
             custom_sets: vec![model_set.clone()],
+            custom_dynamic_state: None,
         }.into_renderable_object(queue.clone()))
         .collect()
 }
