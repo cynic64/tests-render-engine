@@ -8,7 +8,7 @@ use render_engine::{Buffer, Format, Queue, RenderPass, Set};
 use nalgebra_glm::*;
 
 use std::marker::PhantomData;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::{default_sampler, relative_path};
@@ -165,7 +165,7 @@ pub fn load_obj(queue: Queue, render_pass: RenderPass, path: &Path) -> Vec<Rende
     // (Mesh, material_idx)
     let meshes: Vec<(Mesh<PosTexNormTan>, usize)> = raw_meshes
         .iter()
-        .map(|mesh| (convert_mesh(mesh), mesh.material_id.unwrap_or(0)))
+        .map(|mesh| (add_tangents(&convert_mesh(mesh)), mesh.material_id.unwrap_or(0)))
         .collect();
 
     // create material buffers and load textures
@@ -268,7 +268,50 @@ pub fn load_obj(queue: Queue, render_pass: RenderPass, path: &Path) -> Vec<Rende
     objects
 }
 
-fn convert_mesh(mesh: &tobj::Mesh) -> Mesh<PosTexNormTan> {
+pub fn load_obj_no_textures(queue: Queue, render_pass: RenderPass, vs_path: &Path, fs_path: &Path, obj_path: &Path) -> Vec<RenderableObject> {
+    // loads all objects in an obj file without loading any textures.
+    // only set included: model buffer at set 0, binding 0
+
+    // get concrete pipeline, needed to create set later
+    let pipeline_spec = PipelineSpec {
+        vs_path: vs_path.to_path_buf(),
+        fs_path: fs_path.to_path_buf(),
+        fill_type: PrimitiveTopology::TriangleList,
+        read_depth: true,
+        write_depth: true,
+        vtype: VertexType::<PosTexNorm>::new(),
+    };
+    let pipeline = pipeline_spec.concrete(queue.device().clone(), render_pass);
+
+    // create model set
+    let model_data = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1));
+    let model_buffer = bufferize_data(queue.clone(), model_data);
+    let model_set = pds_for_buffers(pipeline, &[model_buffer], 0).unwrap();
+
+    // load meshes
+    let obj = tobj::load_obj(obj_path).unwrap();
+    let raw_meshes: Vec<tobj::Mesh> = obj.0.iter().map(|model| model.mesh.clone()).collect();
+    let meshes: Vec<Mesh<PosTexNorm>> = raw_meshes
+        .iter()
+        .map(|mesh| convert_mesh(mesh))
+        .collect();
+
+    // create renderable objects
+    meshes
+        .iter()
+        .map(|mesh| ObjectPrototype {
+            vs_path: vs_path.to_path_buf(),
+            fs_path: fs_path.to_path_buf(),
+            fill_type: PrimitiveTopology::TriangleList,
+            read_depth: true,
+            write_depth: true,
+            mesh: mesh.clone(),
+            custom_sets: vec![model_set.clone()],
+        }.into_renderable_object(queue.clone()))
+        .collect()
+}
+
+fn convert_mesh(mesh: &tobj::Mesh) -> Mesh<PosTexNorm> {
     let mut vertices = vec![];
     for i in 0..mesh.positions.len() / 3 {
         let position = [
@@ -294,12 +337,10 @@ fn convert_mesh(mesh: &tobj::Mesh) -> Mesh<PosTexNormTan> {
         });
     }
 
-    let base_mesh = Mesh {
+    Mesh {
         vertices,
         indices: mesh.indices.clone(),
-    };
-
-    add_tangents(&base_mesh)
+    }
 }
 
 #[derive(Default, Debug, Clone, Copy)]

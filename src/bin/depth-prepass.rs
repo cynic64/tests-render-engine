@@ -1,19 +1,14 @@
 use render_engine as re;
 
 use re::collection_cache::pds_for_buffers;
-use re::mesh::ObjectPrototype;
-use re::mesh::{Mesh, PrimitiveTopology};
-use re::system::{Pass, System};
-use re::utils::bufferize_data;
-use re::window::Window;
 use re::render_passes;
-
-use nalgebra_glm::*;
+use re::system::{Pass, System};
+use re::window::Window;
 
 use std::collections::HashMap;
 
-use tests_render_engine::mesh::load_obj_single;
-use tests_render_engine::{relative_path, OrbitCamera};
+use tests_render_engine::mesh::load_obj_no_textures;
+use tests_render_engine::{relative_path, FlyCamera};
 
 fn main() {
     // initialize window
@@ -56,32 +51,28 @@ fn main() {
 
     window.set_render_pass(rpass1.clone());
 
-    // create buffer and set for model matrix
-    let model_data: [[f32; 4]; 4] = Mat4::identity().into();
-    let model_buffer = bufferize_data(queue.clone(), model_data);
-
     // initialize camera
-    let mut camera = OrbitCamera::default();
+    let mut camera = FlyCamera::default();
 
-    // load create pipeline spec and set for model matrix
-    let mesh = load_obj_single(&relative_path("meshes/dragon.obj"));
-
-    let mut dragon = ObjectPrototype {
-        vs_path: relative_path("shaders/depth-prepass/vert.glsl"),
-        fs_path: relative_path("shaders/depth-prepass/frag.glsl"),
-        fill_type: PrimitiveTopology::TriangleList,
-        read_depth: true,
-        write_depth: true,
-        mesh,
-        custom_sets: vec![], // will be filled in later
-    }
-    .into_renderable_object(queue.clone());
-
-    let pipeline = dragon
-        .pipeline_spec
-        .concrete(device.clone(), rpass1.clone());
-    let model_set = pds_for_buffers(pipeline.clone(), &[model_buffer], 0).unwrap();
-    dragon.custom_sets = vec![model_set];
+    // load objects with shaders for depth prepass
+    let objects_depth = load_obj_no_textures(
+        queue.clone(),
+        rpass1.clone(),
+        &relative_path("shaders/depth-prepass/vert.glsl"),
+        &relative_path("shaders/depth-prepass/frag.glsl"),
+        &relative_path("meshes/sponza/sponza.obj"),
+    );
+    let objects_geo: Vec<_> = objects_depth.iter().map(|obj| {
+        let mut new_obj = obj.clone();
+        new_obj.pipeline_spec.vs_path = relative_path("shaders/depth-prepass/object_vert.glsl");
+        new_obj.pipeline_spec.fs_path = relative_path("shaders/depth-prepass/object_frag.glsl");
+        new_obj.pipeline_spec.write_depth = false;
+        new_obj
+    })
+    .collect();
+    // needed for creating camera set
+    let pipeline_depth = objects_depth[0].pipeline_spec.concrete(device.clone(), rpass1.clone());
+    let pipeline_color = objects_geo[0].pipeline_spec.concrete(device.clone(), rpass2.clone());
 
     // create fullscreen quad
     /*
@@ -122,25 +113,26 @@ fn main() {
         camera.update(window.get_frame_info());
 
         let camera_buffer = camera.get_buffer(queue.clone());
-        let camera_set = pds_for_buffers(pipeline.clone(), &[camera_buffer], 1).unwrap();
+        let camera_set_depth = pds_for_buffers(pipeline_depth.clone(), &[camera_buffer.clone()], 1).unwrap();
+        let camera_set_geo = pds_for_buffers(pipeline_color.clone(), &[camera_buffer.clone()], 1).unwrap();
 
-        // in the beginning, custom_sets only includes the model set. handle
-        // both cases.
-        if dragon.custom_sets.len() == 1 {
-            dragon.custom_sets.push(camera_set);
-        } else if dragon.custom_sets.len() == 2 {
-            dragon.custom_sets[1] = camera_set;
-        } else {
-            panic!("weird custom set length");
-        }
-
-        // replace old "prepass" object list
-        all_objects.insert("prepass", vec![dragon.clone()]);
-        let mut geo_dragon = dragon.clone();
-        geo_dragon.pipeline_spec.write_depth = false;
-        geo_dragon.pipeline_spec.vs_path = relative_path("shaders/depth-prepass/object_vert.glsl");
-        geo_dragon.pipeline_spec.fs_path = relative_path("shaders/depth-prepass/object_frag.glsl");
-        all_objects.insert("geometry", vec![geo_dragon]);
+        // add camera sets to objects and objects into all_objects
+        all_objects.insert("prepass", objects_depth
+                           .iter()
+                           .map(|obj| {
+                               let mut new_obj = obj.clone();
+                               new_obj.custom_sets.push(camera_set_depth.clone());
+                               new_obj
+                           })
+                           .collect());
+        all_objects.insert("geometry", objects_geo
+                           .iter()
+                           .map(|obj| {
+                               let mut new_obj = obj.clone();
+                               new_obj.custom_sets.push(camera_set_geo.clone());
+                               new_obj
+                           })
+                           .collect());
 
         // draw
         system.render_to_window(&mut window, all_objects.clone());
