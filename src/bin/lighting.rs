@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use tests_render_engine::{default_sampler, relative_path, OrbitCamera};
-use tests_render_engine::mesh::{add_tangents, load_obj};
+use tests_render_engine::mesh::{add_tangents, load_obj_single};
 
 fn main() {
     // initialize window
@@ -41,6 +41,7 @@ fn main() {
                 "resolve_depth",
             ],
             images_needed_tags: vec![],
+            custom_images: HashMap::new(),
             render_pass: render_pass.clone(),
         }],
         "resolve_color",
@@ -78,14 +79,15 @@ fn main() {
     let mut camera = OrbitCamera::default();
 
     // load mesh and create object
-    let basic_mesh = load_obj(&relative_path("meshes/raptor.obj"));
+    let basic_mesh = load_obj_single(&relative_path("meshes/raptor.obj"));
     let mesh = add_tangents(&basic_mesh);
 
     let mut object = ObjectPrototype {
         vs_path: relative_path("shaders/lighting/object_vert.glsl"),
         fs_path: relative_path("shaders/lighting/object_frag.glsl"),
         fill_type: PrimitiveTopology::TriangleList,
-        depth_buffer: true,
+        read_depth: true,
+        write_depth: true,
         mesh,
         custom_sets: vec![],
     }
