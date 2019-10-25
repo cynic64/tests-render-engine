@@ -18,8 +18,8 @@ use std::collections::HashMap;
 use tests_render_engine::mesh::{load_obj_single, fullscreen_quad};
 use tests_render_engine::{relative_path, OrbitCamera};
 
-// patches are laid out in a 3x2
-const SHADOW_MAP_DIMS: [u32; 2] = [3072, 2048];
+// patches are laid out in a 6x1
+const SHADOW_MAP_DIMS: [u32; 2] = [6144, 1024];
 const PATCH_DIMS: [f32; 2] = [1024.0, 1024.0];
 
 fn main() {
@@ -167,7 +167,7 @@ fn convert_to_shadow_casters(
     // render-engine doesn't support geometry shaders, so the easiest way to do
     // this is to convert one object into 6 different ones, one for each face of
     // the cubemap, that each render to a different part of a 2D texture.
-    // for now this function assumes a 3x2 patch layout
+    // for now this function assumes a 6x1 patch layout
     let view_directions = [
         vec3(1.0, 0.0, 0.0),
         vec3(0.0, 1.0, 0.0),
@@ -190,9 +190,9 @@ fn convert_to_shadow_casters(
         [0.0, 0.0],
         [1.0, 0.0],
         [2.0, 0.0],
-        [0.0, 1.0],
-        [1.0, 1.0],
-        [2.0, 1.0],
+        [3.0, 0.0],
+        [4.0, 0.0],
+        [5.0, 0.0],
     ];
 
     let proj_set = create_projection_set(queue.clone(), pipeline.clone());
@@ -238,7 +238,7 @@ fn convert_to_shadow_casters(
 fn create_projection_set(queue: Queue, pipeline: Pipeline) -> Set {
     let (near, far) = (0.1, 250.0);
     // pi / 2 = 90 deg., 1.0 = aspect ratio
-    let proj_data: [[f32; 4]; 4] = perspective(std::f32::consts::PI / 2.0, 1.0, near, far).into();
+    let proj_data: [[f32; 4]; 4] = perspective(1.0, std::f32::consts::PI / 2.0, near, far).into();
     let proj_buffer = bufferize_data(queue, proj_data);
 
     pds_for_buffers(pipeline, &[proj_buffer], 1).unwrap()
