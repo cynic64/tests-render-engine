@@ -39,6 +39,8 @@ fn main() {
 
     let rpass1 = render_passes::only_depth(device.clone());
     let rpass2 = render_passes::basic(device.clone());
+    let rpass3 = render_passes::with_depth(device.clone());
+
     let mut system = System::new(
         queue.clone(),
         vec![
@@ -56,6 +58,13 @@ fn main() {
                 images_needed_tags: vec!["shadow_map"],
                 render_pass: rpass2.clone(),
             },
+            // renders final scene
+            Pass {
+                name: "final",
+                images_created_tags: vec!["final_color", "final_depth"],
+                images_needed_tags: vec![],
+                render_pass: rpass3.clone(),
+            },
         ],
         custom_images,
         "cubemap_view",
@@ -69,18 +78,8 @@ fn main() {
     // initialize camera
     let mut camera = OrbitCamera::default();
 
-    // load create pipeline spec and set for model matrix
+    // load object
     let mesh = load_obj_single(&relative_path("meshes/shadowtest.obj"));
-
-    let custom_dynstate = DynamicState {
-        line_width: None,
-        viewports: Some(vec![Viewport {
-            origin: [0.0, 0.0],
-            dimensions: PATCH_DIMS,
-            depth_range: 0.0..1.0,
-        }]),
-        scissors: None,
-    };
 
     let mut base_object = ObjectPrototype {
         vs_path: relative_path("shaders/cubemap/shadow_cast_vert.glsl"),
@@ -90,13 +89,16 @@ fn main() {
         write_depth: true,
         mesh,
         custom_sets: vec![], // will be filled in later
-        custom_dynamic_state: Some(custom_dynstate),
+        custom_dynamic_state: None,
     }
     .into_renderable_object(queue.clone());
 
+    // create pipeline for shadow casting shaders
     let pipe_caster = base_object
         .pipeline_spec
         .concrete(device.clone(), rpass1.clone());
+
+    // set for model uniform
     let model_set = pds_for_buffers(pipe_caster.clone(), &[model_buffer], 0).unwrap();
     base_object.custom_sets = vec![model_set];
 
@@ -123,6 +125,7 @@ fn main() {
     let mut all_objects = HashMap::new();
     all_objects.insert("shadow", shadow_casters);
     all_objects.insert("cubemap_view", vec![quad]);
+    all_objects.insert("final", vec![]);
 
     while !window.update() {
         // update camera and camera buffer
