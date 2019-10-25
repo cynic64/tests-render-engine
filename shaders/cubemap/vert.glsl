@@ -6,11 +6,14 @@ layout(set = 0, binding = 0) uniform Model {
     mat4 model;
 } model;
 
-layout(set = 1, binding = 0) uniform Camera {
-    mat4 view;
+layout(set = 1, binding = 0) uniform Proj {
     mat4 proj;
-} camera;
+} shadow_proj;
+
+layout(set = 2, binding = 0) uniform View {
+  mat4 view;
+} shadow_view;
 
 void main() {
-  gl_Position = camera.proj * camera.view * model.model * vec4(position, 1.0);
+  gl_Position = shadow_proj.proj * shadow_view.view * model.model * vec4(position, 1.0);
 }

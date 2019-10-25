@@ -7,7 +7,7 @@ layout(set = 0, binding = 0) uniform sampler2D depth_map;
 
 void main() {
   float depth = texture(depth_map, v_pos.xy * 0.5 + 0.5).r;
-  f_color = vec4(vec3(pow(depth, 100.0)), 1.0);
+  f_color = vec4(vec3(depth), 1.0);
   /* f_color = vec4(v_pos, 1.0); */
 }
 
