@@ -53,7 +53,7 @@ fn main() {
         render_pass.clone(),
         &relative_path("meshes/sponza/sponza.obj"),
         relative_path("shaders/pretty/vert.glsl"),
-        relative_path("shaders/pretty/frag.glsl"),
+        relative_path("shaders/pretty/all_frag.glsl"),
     );
     println!("Objects Loaded: {}", objects.len());
     let mut all_objects = HashMap::new();
@@ -86,7 +86,7 @@ fn main() {
 
 #[allow(dead_code)]
 struct Light {
-    direction: [f32; 4],
+    position: [f32; 4],
     power: f32,
 }
 
@@ -102,9 +102,10 @@ impl MovingLight {
     }
 
     fn get_buffer(&self, queue: Queue) -> Buffer {
-        let time = get_elapsed(self.start_time) / 4.0;
+        // let time = get_elapsed(self.start_time) / 4.0;
         let data = Light {
-            direction: [time.sin(), 2.0, time.cos(), 0.0],
+            // position: [time.sin(), 10.0, time.cos(), 0.0],
+            position: [0.0, 10.0, 0.0, 0.0],
             power: 1.0,
         };
 
