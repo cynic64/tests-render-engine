@@ -34,8 +34,8 @@ fn main() {
         Format::D32Sfloat,
     )
     .unwrap();
-    let mut depth_view_custom_images = HashMap::new();
-    depth_view_custom_images.insert("shadow_map", patched_shadow_image);
+    let mut custom_images = HashMap::new();
+    custom_images.insert("shadow_map", patched_shadow_image);
 
     let rpass1 = render_passes::only_depth(device.clone());
     let rpass2 = render_passes::basic(device.clone());
@@ -48,7 +48,6 @@ fn main() {
                 images_created_tags: vec!["shadow_map"],
                 images_needed_tags: vec![],
                 render_pass: rpass1.clone(),
-                custom_images: HashMap::new(),
             },
             // displays shadow map for debugging
             Pass {
@@ -56,9 +55,9 @@ fn main() {
                 images_created_tags: vec!["cubemap_view"],
                 images_needed_tags: vec!["shadow_map"],
                 render_pass: rpass2.clone(),
-                custom_images: depth_view_custom_images,
             },
         ],
+        custom_images,
         "cubemap_view",
     );
     window.set_render_pass(rpass1.clone());
@@ -83,7 +82,7 @@ fn main() {
         scissors: None,
     };
 
-    let mut base_dragon = ObjectPrototype {
+    let mut base_object = ObjectPrototype {
         vs_path: relative_path("shaders/cubemap/shadow_cast_vert.glsl"),
         fs_path: relative_path("shaders/cubemap/shadow_cast_frag.glsl"),
         fill_type: PrimitiveTopology::TriangleList,
@@ -95,11 +94,11 @@ fn main() {
     }
     .into_renderable_object(queue.clone());
 
-    let pipe_dragon = base_dragon
+    let pipe_caster = base_object
         .pipeline_spec
         .concrete(device.clone(), rpass1.clone());
-    let model_set = pds_for_buffers(pipe_dragon.clone(), &[model_buffer], 0).unwrap();
-    base_dragon.custom_sets = vec![model_set];
+    let model_set = pds_for_buffers(pipe_caster.clone(), &[model_buffer], 0).unwrap();
+    base_object.custom_sets = vec![model_set];
 
     // create fullscreen quad to debug cubemap
     let quad = fullscreen_quad(
@@ -109,20 +108,20 @@ fn main() {
     );
 
     // create buffer for shadow projection matrix
-    let (near, far) = (1.0, 250.0);
+    let (near, far) = (0.1, 250.0);
     // pi / 2 = 90 deg., 1.0 = aspect ratio
     let proj_data: [[f32; 4]; 4] = perspective(std::f32::consts::PI / 2.0, 1.0, near, far).into();
     let proj_buffer = bufferize_data(queue.clone(), proj_data);
-    let proj_set = pds_for_buffers(pipe_dragon.clone(), &[proj_buffer], 1).unwrap();
-    base_dragon.custom_sets.push(proj_set);
+    let proj_set = pds_for_buffers(pipe_caster.clone(), &[proj_buffer], 1).unwrap();
+    base_object.custom_sets.push(proj_set);
 
     // create 6 different dragon objects, each with a different view matrix and
     // dynamic state, to draw to the 6 different faces of the patched texture
-    let dragons = convert_to_shadow_casters(queue.clone(), pipe_dragon, base_dragon);
+    let shadow_casters = convert_to_shadow_casters(queue.clone(), pipe_caster, base_object);
 
     // used in main loop
     let mut all_objects = HashMap::new();
-    all_objects.insert("shadow", dragons);
+    all_objects.insert("shadow", shadow_casters);
     all_objects.insert("cubemap_view", vec![quad]);
 
     while !window.update() {
