@@ -41,9 +41,10 @@ fn main() {
                 "resolve_depth",
             ],
             images_needed_tags: vec![],
-            custom_images: HashMap::new(),
             render_pass: render_pass.clone(),
         }],
+        // custom images, we use none
+        HashMap::new(),
         "resolve_color",
     );
 
@@ -90,6 +91,7 @@ fn main() {
         write_depth: true,
         mesh,
         custom_sets: vec![],
+        custom_dynamic_state: None,
     }
     .into_renderable_object(queue.clone());
 

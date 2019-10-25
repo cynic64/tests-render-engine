@@ -6,7 +6,7 @@ Why do I have to manage queue and device? :(
 */
 
 use re::collection_cache::pds_for_buffers;
-use re::input::{get_elapsed, VirtualKeyCode};
+use re::input::get_elapsed;
 use re::mesh::{Mesh, PrimitiveTopology, ObjectPrototype};
 use re::render_passes;
 use re::system::{Pass, System};
@@ -44,6 +44,8 @@ fn main() {
             images_needed_tags: vec![],
             render_pass: render_pass.clone(),
         }],
+        // custom images, we use none
+        HashMap::new(),
         "resolve_color",
     );
 
@@ -68,20 +70,24 @@ fn main() {
     let mut raptor = ObjectPrototype {
         vs_path: relative_path("shaders/normal-mapping/object_vert.glsl"),
         fs_path: relative_path("shaders/normal-mapping/object_frag.glsl"),
-        depth_buffer: true,
+        read_depth: true,
+        write_depth: true,
         fill_type: PrimitiveTopology::TriangleList,
         mesh: raptor_mesh,
         custom_sets: vec![],
+        custom_dynamic_state: None,
     }
     .into_renderable_object(queue.clone());
 
     let mut normals = ObjectPrototype {
         vs_path: relative_path("shaders/normal-mapping/debug_vert.glsl"),
         fs_path: relative_path("shaders/normal-mapping/debug_frag.glsl"),
-        depth_buffer: true,
+        read_depth: true,
+        write_depth: true,
         fill_type: PrimitiveTopology::LineList,
         mesh: normals_mesh,
         custom_sets: vec![],
+        custom_dynamic_state: None,
     }
     .into_renderable_object(queue.clone());
 
@@ -107,8 +113,6 @@ fn main() {
         .concrete(device.clone(), render_pass.clone());
     let sampler = default_sampler(device.clone());
     let start_time = std::time::Instant::now();
-
-    let mut debug: bool = false;
 
     while !window.update() {
         // update camera and camera buffer
@@ -145,22 +149,15 @@ fn main() {
         .unwrap(); // 0 is the descriptor set idx
         normals.custom_sets = vec![normals_set];
 
-        if window
-            .get_frame_info()
-            .keydowns
-            .contains(&VirtualKeyCode::C)
-        {
-            debug = !debug;
-            if debug {
-                raptor.pipeline_spec.fs_path =
-                    relative_path("shaders/normal-mapping/object_frag_debug.glsl");
-            } else {
-                raptor.pipeline_spec.fs_path =
-                    relative_path("shaders/normal-mapping/object_frag.glsl");
-            }
+        if window.get_frame_info().keys_down.c {
+            raptor.pipeline_spec.fs_path =
+                relative_path("shaders/normal-mapping/object_frag_debug.glsl");
+        } else {
+            raptor.pipeline_spec.fs_path =
+                relative_path("shaders/normal-mapping/object_frag.glsl");
         }
 
-        let objects = if debug {
+        let objects = if window.get_frame_info().keys_down.c {
             vec![raptor.clone(), normals.clone()]
         } else {
             vec![raptor.clone()]

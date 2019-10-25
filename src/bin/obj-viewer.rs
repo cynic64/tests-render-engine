@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::env;
 use std::path::Path;
 
-use tests_render_engine::FlyCamera;
+use tests_render_engine::{FlyCamera, relative_path};
 use tests_render_engine::mesh::load_obj;
 
 fn main() {
@@ -62,6 +62,8 @@ fn main() {
         queue.clone(),
         render_pass.clone(),
         path,
+        relative_path("shaders/obj-viewer/vert.glsl"),
+        relative_path("shaders/obj-viewer/frag.glsl"),
     );
     println!("Objects Loaded: {}", objects.len());
     let mut all_objects = HashMap::new();

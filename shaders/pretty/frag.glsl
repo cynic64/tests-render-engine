@@ -62,7 +62,8 @@ void main() {
   vec3 specular = material.specular * spec;
 
   // result
-  vec3 result = ambient + (diffuse + specular) * light.strength.r;
+  /* vec3 result = ambient + (diffuse + specular) * light.strength.r; */
+  vec3 result = tex_diffuse.rgb;
 
   // gamma correction
   float gamma = 2.2;

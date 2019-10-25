@@ -26,26 +26,17 @@ fn main() {
                 images_created_tags: vec!["depth"],
                 images_needed_tags: vec![],
                 render_pass: rpass1.clone(),
-                custom_images: HashMap::new(),
             },
-            /*
-            Pass {
-                name: "depth_view",
-                images_created_tags: vec!["depth_view"],
-                images_needed_tags: vec!["depth"],
-                render_pass: rpass2.clone(),
-                custom_images: HashMap::new(),
-            },
-            */
             Pass {
                 name: "geometry",
                 // should re-use old depth buffer
                 images_created_tags: vec!["color", "depth"],
                 images_needed_tags: vec![],
                 render_pass: rpass2.clone(),
-                custom_images: HashMap::new(),
             },
         ],
+        // custom images, we use none
+        HashMap::new(),
         "color",
     );
 
@@ -73,36 +64,6 @@ fn main() {
     // needed for creating camera set
     let pipeline_depth = objects_depth[0].pipeline_spec.concrete(device.clone(), rpass1.clone());
     let pipeline_color = objects_geo[0].pipeline_spec.concrete(device.clone(), rpass2.clone());
-
-    // create fullscreen quad
-    /*
-    let fullscreen = ObjectPrototype {
-        vs_path: relative_path("shaders/depth-prepass/depth_view_vert.glsl"),
-        fs_path: relative_path("shaders/depth-prepass/depth_view_frag.glsl"),
-        fill_type: PrimitiveTopology::TriangleStrip,
-        read_depth: false,
-        write_depth: false,
-        mesh: Mesh {
-            vertices: vec![
-                V2D {
-                    tex_coords: [-1.0, -1.0],
-                },
-                V2D {
-                    tex_coords: [-1.0, 1.0],
-                },
-                V2D {
-                    tex_coords: [1.0, -1.0],
-                },
-                V2D {
-                    tex_coords: [1.0, 1.0],
-                },
-            ],
-            indices: vec![0, 1, 2, 3],
-        },
-        custom_sets: vec![],
-    }
-    .into_renderable_object(queue.clone());
-    */
 
     // used in main loop
     let mut all_objects = HashMap::new();
