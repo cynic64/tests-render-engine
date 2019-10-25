@@ -1,12 +1,12 @@
 use render_engine as re;
 
 use re::collection_cache::pds_for_buffers;
-use re::mesh::ObjectPrototype;
-use re::mesh::{Mesh, PrimitiveTopology};
+use re::mesh::{ObjectPrototype, PrimitiveTopology};
 use re::system::{Pass, RenderableObject, System};
 use re::utils::bufferize_data;
 use re::window::Window;
-use re::{render_passes, Format, Image, Queue, Pipeline};
+use re::{render_passes, Format, Image, Queue, Pipeline, Set};
+use re::pipeline_cache::PipelineSpec;
 
 use vulkano::command_buffer::DynamicState;
 use vulkano::pipeline::viewport::Viewport;
@@ -67,7 +67,7 @@ fn main() {
             },
         ],
         custom_images,
-        "cubemap_view",
+        "final_color",
     );
     window.set_render_pass(rpass1.clone());
 
@@ -109,27 +109,47 @@ fn main() {
         relative_path("shaders/cubemap/display_cubemap_frag.glsl"),
     );
 
-    // create buffer for shadow projection matrix
-    let (near, far) = (0.1, 250.0);
-    // pi / 2 = 90 deg., 1.0 = aspect ratio
-    let proj_data: [[f32; 4]; 4] = perspective(std::f32::consts::PI / 2.0, 1.0, near, far).into();
-    let proj_buffer = bufferize_data(queue.clone(), proj_data);
-    let proj_set = pds_for_buffers(pipe_caster.clone(), &[proj_buffer], 1).unwrap();
-    base_object.custom_sets.push(proj_set);
-
     // create 6 different dragon objects, each with a different view matrix and
     // dynamic state, to draw to the 6 different faces of the patched texture
-    let shadow_casters = convert_to_shadow_casters(queue.clone(), pipe_caster, base_object);
+    let shadow_casters = convert_to_shadow_casters(queue.clone(), pipe_caster, base_object.clone());
+
+    // create a version of the base object with shaders for rendering the
+    // final image
+    let object_final = RenderableObject {
+        pipeline_spec: PipelineSpec {
+            vs_path: relative_path("shaders/cubemap/final_vert.glsl"),
+            fs_path: relative_path("shaders/cubemap/final_frag.glsl"),
+            ..base_object.pipeline_spec.clone()
+        },
+        ..base_object
+    };
+    let pipeline_final = object_final.pipeline_spec.concrete(device.clone(), rpass3);
 
     // used in main loop
     let mut all_objects = HashMap::new();
     all_objects.insert("shadow", shadow_casters);
     all_objects.insert("cubemap_view", vec![quad]);
-    all_objects.insert("final", vec![]);
 
     while !window.update() {
         // update camera and camera buffer
         camera.update(window.get_frame_info());
+        let camera_buffer = camera.get_buffer(queue.clone());
+        let camera_set = pds_for_buffers(pipeline_final.clone(), &[camera_buffer], 1).unwrap();
+
+        if window.get_frame_info().keys_down.c {
+            system.output_tag = "cubemap_view";
+        } else {
+            system.output_tag = "final_color";
+        }
+
+        // create updated object of final pass
+        // it already has a model buffer in custom_sets, just need to add the
+        // camera set
+        let mut cur_object_final = object_final.clone();
+        cur_object_final.custom_sets.push(camera_set);
+
+        // add to scene
+        all_objects.insert("final", vec![cur_object_final]);
 
         // draw
         system.render_to_window(&mut window, all_objects.clone());
@@ -175,6 +195,8 @@ fn convert_to_shadow_casters(
         [2.0, 1.0],
     ];
 
+    let proj_set = create_projection_set(queue.clone(), pipeline.clone());
+
     view_directions
         .iter()
         .zip(&up_directions)
@@ -190,11 +212,11 @@ fn convert_to_shadow_casters(
             let set = pds_for_buffers(pipeline.clone(), &[view_buffer], 2).unwrap();
 
             // all sets for the dragon we're currently creating
-            // we take the model and projection sets from the base dragon
-            // (sets 0 and 1)
+            // we take the model set from the base dragon
+            // (set 0)
             let custom_sets = vec![
                 base_object.custom_sets[0].clone(),
-                base_object.custom_sets[1].clone(),
+                proj_set.clone(),
                 set,
             ];
 
@@ -211,6 +233,15 @@ fn convert_to_shadow_casters(
             }
         })
         .collect()
+}
+
+fn create_projection_set(queue: Queue, pipeline: Pipeline) -> Set {
+    let (near, far) = (0.1, 250.0);
+    // pi / 2 = 90 deg., 1.0 = aspect ratio
+    let proj_data: [[f32; 4]; 4] = perspective(std::f32::consts::PI / 2.0, 1.0, near, far).into();
+    let proj_buffer = bufferize_data(queue, proj_data);
+
+    pds_for_buffers(pipeline, &[proj_buffer], 1).unwrap()
 }
 
 fn dynamic_state_for_bounds(origin: [f32; 2], dimensions: [f32; 2]) -> DynamicState {
