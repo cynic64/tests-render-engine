@@ -9,5 +9,3 @@ void main() {
   float depth = texture(depth_map, v_pos.xy).r;
   f_color = vec4(vec3(pow(depth, 20.0)), 1.0);
 }
-
-

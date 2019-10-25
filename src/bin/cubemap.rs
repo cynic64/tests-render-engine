@@ -62,7 +62,7 @@ fn main() {
             Pass {
                 name: "final",
                 images_created_tags: vec!["final_color", "final_depth"],
-                images_needed_tags: vec![],
+                images_needed_tags: vec!["shadow_map"],
                 render_pass: rpass3.clone(),
             },
         ],
