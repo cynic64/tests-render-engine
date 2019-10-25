@@ -1,11 +1,10 @@
 use render_engine as re;
 
-use re::input::FrameInfo;
+use re::input::{FrameInfo, get_elapsed};
 use re::utils::bufferize_data;
+use re::{Buffer, Device, Queue};
 
 // TODO: move default-sampler to re
-use vulkano::buffer::BufferAccess;
-use vulkano::device::{Device, Queue};
 use vulkano::sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode};
 
 use nalgebra_glm::*;
@@ -143,7 +142,7 @@ impl OrbitCamera {
         .into();
     }
 
-    pub fn get_buffer(&self, queue: Arc<Queue>) -> Arc<dyn BufferAccess + Send + Sync> {
+    pub fn get_buffer(&self, queue: Queue) -> Buffer {
         bufferize_data(
             queue,
             CameraData {
@@ -276,7 +275,7 @@ impl FlyCamera {
         .into();
     }
 
-    pub fn get_buffer(&self, queue: Arc<Queue>) -> Arc<dyn BufferAccess + Send + Sync> {
+    pub fn get_buffer(&self, queue: Queue) -> Buffer {
         bufferize_data(
             queue,
             CameraData {
@@ -297,7 +296,7 @@ struct CameraData {
 
 pub type CameraMatrix = [[f32; 4]; 4];
 
-pub fn default_sampler(device: Arc<Device>) -> Arc<Sampler> {
+pub fn default_sampler(device: Device) -> Arc<Sampler> {
     Sampler::new(
         device,
         Filter::Linear,
@@ -312,4 +311,32 @@ pub fn default_sampler(device: Arc<Device>) -> Arc<Sampler> {
         0.0,
     )
     .unwrap()
+}
+
+#[allow(dead_code)]
+pub struct Light {
+    direction: [f32; 4],
+    power: f32,
+}
+
+pub struct MovingLight {
+    start_time: std::time::Instant,
+}
+
+impl MovingLight {
+    pub fn new() -> Self {
+        Self {
+            start_time: std::time::Instant::now(),
+        }
+    }
+
+    pub fn get_buffer(&self, queue: Queue) -> Buffer {
+        let time = get_elapsed(self.start_time) / 4.0;
+        let data = Light {
+            direction: [time.sin(), 2.0, time.cos(), 0.0],
+            power: 1.0,
+        };
+
+        bufferize_data(queue, data)
+    }
 }

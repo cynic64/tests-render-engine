@@ -54,7 +54,7 @@ bool is_in_shadow() {
 void main() {
   vec3 norm = v_normal * 0.5 + 0.5;
 
-  vec3 ambient = norm * 0.1;
+  vec3 ambient = norm * 0.3;
 
   float shadow = is_in_shadow() ? 1.0 : 0.0;
 
