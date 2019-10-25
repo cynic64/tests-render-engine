@@ -52,6 +52,13 @@ bool is_in_shadow() {
 }
 
 void main() {
+  vec3 norm = v_normal * 0.5 + 0.5;
+
+  vec3 ambient = norm * 0.1;
+
   float shadow = is_in_shadow() ? 1.0 : 0.0;
-  f_color = vec4(vec3(1.0 - shadow), 1.0);
+
+  vec3 diffuse = norm * (1.0 - shadow);
+
+  f_color = vec4(ambient + diffuse, 1.0);
 }
