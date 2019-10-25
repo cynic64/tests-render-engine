@@ -14,9 +14,8 @@ use vulkano::pipeline::viewport::Viewport;
 use nalgebra_glm::*;
 
 use std::collections::HashMap;
-use std::path::Path;
 
-use tests_render_engine::mesh::load_obj_single;
+use tests_render_engine::mesh::{load_obj_single, fullscreen_quad};
 use tests_render_engine::{relative_path, OrbitCamera};
 
 // patches are laid out in a 3x2
@@ -103,33 +102,11 @@ fn main() {
     base_dragon.custom_sets = vec![model_set];
 
     // create fullscreen quad to debug cubemap
-    let quad = ObjectPrototype {
-        vs_path: relative_path("shaders/cubemap/display_cubemap_vert.glsl"),
-        fs_path: relative_path("shaders/cubemap/display_cubemap_frag.glsl"),
-        fill_type: PrimitiveTopology::TriangleStrip,
-        read_depth: false,
-        write_depth: false,
-        mesh: Mesh {
-            vertices: vec![
-                V2D {
-                    position: [-1.0, -1.0],
-                },
-                V2D {
-                    position: [-1.0, 1.0],
-                },
-                V2D {
-                    position: [1.0, -1.0],
-                },
-                V2D {
-                    position: [1.0, 1.0],
-                },
-            ],
-            indices: vec![0, 1, 2, 3],
-        },
-        custom_sets: vec![],
-        custom_dynamic_state: None,
-    }
-    .into_renderable_object(queue.clone());
+    let quad = fullscreen_quad(
+        queue.clone(),
+        relative_path("shaders/cubemap/display_cubemap_vert.glsl"),
+        relative_path("shaders/cubemap/display_cubemap_frag.glsl"),
+    );
 
     // create buffer for shadow projection matrix
     let (near, far) = (1.0, 250.0);

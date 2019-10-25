@@ -8,7 +8,7 @@ use render_engine::{Buffer, Format, Queue, RenderPass, Set};
 use nalgebra_glm::*;
 
 use std::marker::PhantomData;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::{default_sampler, relative_path};
@@ -370,3 +370,39 @@ struct Material {
     shininess: [f32; 4],
     use_texture: [f32; 4],
 }
+
+pub fn fullscreen_quad(queue: Queue, vs_path: PathBuf, fs_path: PathBuf) -> RenderableObject {
+    ObjectPrototype {
+        vs_path,
+        fs_path,
+        fill_type: PrimitiveTopology::TriangleStrip,
+        read_depth: false,
+        write_depth: false,
+        mesh: Mesh {
+            vertices: vec![
+                Vertex2D {
+                    position: [-1.0, -1.0],
+                },
+                Vertex2D {
+                    position: [-1.0, 1.0],
+                },
+                Vertex2D {
+                    position: [1.0, -1.0],
+                },
+                Vertex2D {
+                    position: [1.0, 1.0],
+                },
+            ],
+            indices: vec![0, 1, 2, 3],
+        },
+        custom_sets: vec![],
+        custom_dynamic_state: None,
+    }
+    .into_renderable_object(queue)
+}
+
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Vertex2D {
+    pub position: [f32; 2],
+}
+vulkano::impl_vertex!(Vertex2D, position);
