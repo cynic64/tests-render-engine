@@ -1,13 +1,13 @@
 use render_engine as re;
 
-use re::{Queue, Buffer, Image, Format, Pipeline, Set};
 use re::collection_cache::pds_for_buffers;
+use re::mesh::{ObjectPrototype, PrimitiveTopology, VertexType};
+use re::pipeline_cache::PipelineSpec;
 use re::render_passes;
-use re::system::{Pass, System, RenderableObject};
+use re::system::{Pass, RenderableObject, System};
 use re::utils::bufferize_data;
 use re::window::Window;
-use re::pipeline_cache::PipelineSpec;
-use re::mesh::{PrimitiveTopology, VertexType};
+use re::{Buffer, Format, Image, Pipeline, Queue, Set};
 
 use vulkano::command_buffer::DynamicState;
 use vulkano::pipeline::viewport::Viewport;
@@ -16,8 +16,8 @@ use std::collections::HashMap;
 
 use nalgebra_glm::*;
 
-use tests_render_engine::{FlyCamera, relative_path};
-use tests_render_engine::mesh::{load_obj, fullscreen_quad, PosTexNormTan};
+use tests_render_engine::mesh::{convert_mesh, fullscreen_quad, load_obj, merge, Vertex3D};
+use tests_render_engine::{relative_path, FlyCamera};
 
 /*
 const SHADOW_MAP_DIMS: [u32; 2] = [6144, 1024];
@@ -37,7 +37,7 @@ fn main() {
         SHADOW_MAP_DIMS,
         Format::D32Sfloat,
     )
-        .unwrap();
+    .unwrap();
     let mut custom_images = HashMap::new();
     custom_images.insert("shadow_map", patched_shadow_image);
 
@@ -74,7 +74,6 @@ fn main() {
                 render_pass: render_pass.clone(),
             },
         ],
-        // custom images, we use none
         custom_images,
         "resolve_color",
     );
@@ -111,11 +110,41 @@ fn main() {
         fill_type: PrimitiveTopology::TriangleList,
         read_depth: true,
         write_depth: true,
-        vtype: VertexType::<PosTexNormTan>::new(),
+        vtype: VertexType::<Vertex3D>::new(),
     };
     let pipe_caster = pipe_spec_caster.concrete(device.clone(), rpass_shadow.clone());
 
+    // concatenate all meshes
+    // we load them a second time, which i'd like to change at some point
+    let meshes: Vec<_> = tobj::load_obj(&relative_path("meshes/sponza/sponza.obj"))
+        .unwrap()
+        .0
+        .iter()
+        .map(|model| convert_mesh(&model.mesh))
+        .collect();
+    let merged_mesh = merge(&meshes);
+    let model_data: [[f32; 4]; 4] = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
+    let model_buffer = bufferize_data(queue.clone(), model_data);
+    let model_set = pds_for_buffers(pipe_caster.clone(), &[model_buffer], 0).unwrap();
+    let merged_object = ObjectPrototype {
+        vs_path: relative_path("shaders/pretty/shadow_cast_vert.glsl"),
+        fs_path: relative_path("shaders/pretty/shadow_cast_frag.glsl"),
+        fill_type: PrimitiveTopology::TriangleList,
+        read_depth: true,
+        write_depth: true,
+        mesh: merged_mesh,
+        // copy the model matrix from the first object that we loaded earlier
+        custom_sets: vec![model_set],
+        custom_dynamic_state: None,
+    }
+    .into_renderable_object(queue.clone());
+
+    // convert merged mesh into 6 casters, one for each cubemap face
+    let shadow_casters =
+        convert_to_shadow_casters(queue.clone(), pipe_caster.clone(), merged_object);
+
     let mut all_objects = HashMap::new();
+    all_objects.insert("shadow", shadow_casters);
 
     // used in main loop
     let pipeline = objects[0]
@@ -123,17 +152,6 @@ fn main() {
         .concrete(device.clone(), render_pass.clone());
 
     all_objects.insert("cubemap_view", vec![quad]);
-    all_objects.insert("shadow", objects.clone().iter().flat_map(|obj| {
-        let objects = convert_to_shadow_casters(queue.clone(), pipe_caster.clone(), obj.clone());
-
-        objects.iter().map(|obj| {
-            RenderableObject {
-                pipeline_spec: pipe_spec_caster.clone(),
-                ..obj.clone()
-            }
-        }).collect::<Vec<RenderableObject>>()
-    }).collect());
-
 
     while !window.update() {
         // update camera and light
@@ -141,13 +159,21 @@ fn main() {
         let camera_buffer = camera.get_buffer(queue.clone());
 
         let light_buffer = light.get_buffer(queue.clone());
-        let camera_light_set = pds_for_buffers(pipeline.clone(), &[camera_buffer, light_buffer], 3).unwrap(); // 0 is the descriptor set idx
+        let camera_light_set =
+            pds_for_buffers(pipeline.clone(), &[camera_buffer, light_buffer], 3).unwrap(); // 0 is the descriptor set idx
 
-        all_objects.insert("geometry", objects.clone().iter_mut().map(|obj| {
-            // add camera set to each object before adding it to the scene
-            obj.custom_sets.push(camera_light_set.clone());
-            obj.clone()
-        }).collect());
+        all_objects.insert(
+            "geometry",
+            objects
+                .clone()
+                .iter_mut()
+                .map(|obj| {
+                    // add camera set to each object before adding it to the scene
+                    obj.custom_sets.push(camera_light_set.clone());
+                    obj.clone()
+                })
+                .collect(),
+        );
 
         // draw
         system.render_to_window(&mut window, all_objects.clone());
@@ -159,7 +185,7 @@ fn main() {
 #[allow(dead_code)]
 struct Light {
     position: [f32; 4],
-    power: f32,
+    strength: f32,
 }
 
 struct MovingLight {
@@ -178,7 +204,7 @@ impl MovingLight {
         let data = Light {
             // position: [time.sin(), 10.0, time.cos(), 0.0],
             position: [0.0, 10.0, 0.0, 0.0],
-            power: 1.0,
+            strength: 2.0,
         };
 
         bufferize_data(queue.clone(), data)
@@ -234,23 +260,14 @@ fn convert_to_shadow_casters(
         .zip(&patch_positions)
         .map(|((dir, up), patch_pos): ((&Vec3, &Vec3), &[f32; 2])| {
             let light_pos = vec3(0.0, 10.0, 0.0);
-            let view_matrix: [[f32; 4]; 4] = look_at(
-                &light_pos,
-                &(light_pos + dir),
-                up,
-            )
-            .into();
+            let view_matrix: [[f32; 4]; 4] = look_at(&light_pos, &(light_pos + dir), up).into();
             let view_buffer = bufferize_data(queue.clone(), view_matrix);
             let set = pds_for_buffers(pipeline.clone(), &[view_buffer], 2).unwrap();
 
             // all sets for the dragon we're currently creating
             // we take the model set from the base dragon
             // (set 0)
-            let custom_sets = vec![
-                model_set.clone(),
-                proj_set.clone(),
-                set,
-            ];
+            let custom_sets = vec![model_set.clone(), proj_set.clone(), set];
 
             // dynamic state for the current dragon, represents which part
             // of the patched texture we draw to

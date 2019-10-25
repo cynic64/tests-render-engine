@@ -313,7 +313,7 @@ pub fn load_obj_no_textures(queue: Queue, render_pass: RenderPass, vs_path: &Pat
         .collect()
 }
 
-fn convert_mesh(mesh: &tobj::Mesh) -> Mesh<PosTexNorm> {
+pub fn convert_mesh(mesh: &tobj::Mesh) -> Mesh<PosTexNorm> {
     let mut vertices = vec![];
     for i in 0..mesh.positions.len() / 3 {
         let position = [
@@ -345,23 +345,6 @@ fn convert_mesh(mesh: &tobj::Mesh) -> Mesh<PosTexNorm> {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy)]
-pub struct PosTexNorm {
-    pub position: [f32; 3],
-    pub tex_coord: [f32; 2],
-    pub normal: [f32; 3],
-}
-vulkano::impl_vertex!(PosTexNorm, position, tex_coord, normal);
-
-#[derive(Default, Debug, Clone, Copy)]
-pub struct PosTexNormTan {
-    pub position: [f32; 3],
-    pub tex_coord: [f32; 2],
-    pub normal: [f32; 3],
-    pub tangent: [f32; 3],
-}
-vulkano::impl_vertex!(PosTexNormTan, position, tex_coord, normal, tangent);
-
 #[allow(dead_code)]
 struct Material {
     ambient: [f32; 4],
@@ -369,6 +352,36 @@ struct Material {
     specular: [f32; 4],
     shininess: [f32; 4],
     use_texture: [f32; 4],
+}
+
+pub fn merge(meshes: &[Mesh<PosTexNorm>]) -> Mesh<Vertex3D> {
+    // merges a list of meshes into a single mesh with only position data
+
+    // you could probably write this as an iterator, i'm just too lazy
+    let mut vertices = vec![];
+    let mut indices = vec![];
+    // we need to offset some indices because the vertices are being merged into
+    // one giant list
+    let mut index_offset = 0;
+    for mesh in meshes.iter() {
+        for vertex in mesh.vertices.iter() {
+            // only copy position data
+            vertices.push(Vertex3D {
+                position: vertex.position
+            });
+        }
+
+        for index in mesh.indices.iter() {
+            indices.push(index + index_offset);
+        }
+
+        index_offset += mesh.vertices.len() as u32;
+    }
+
+    Mesh {
+        vertices,
+        indices,
+    }
 }
 
 pub fn fullscreen_quad(queue: Queue, vs_path: PathBuf, fs_path: PathBuf) -> RenderableObject {
@@ -406,3 +419,27 @@ pub struct Vertex2D {
     pub position: [f32; 2],
 }
 vulkano::impl_vertex!(Vertex2D, position);
+
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Vertex3D {
+    pub position: [f32; 3],
+}
+
+vulkano::impl_vertex!(Vertex3D, position);
+
+#[derive(Default, Debug, Clone, Copy)]
+pub struct PosTexNorm {
+    pub position: [f32; 3],
+    pub tex_coord: [f32; 2],
+    pub normal: [f32; 3],
+}
+vulkano::impl_vertex!(PosTexNorm, position, tex_coord, normal);
+
+#[derive(Default, Debug, Clone, Copy)]
+pub struct PosTexNormTan {
+    pub position: [f32; 3],
+    pub tex_coord: [f32; 2],
+    pub normal: [f32; 3],
+    pub tangent: [f32; 3],
+}
+vulkano::impl_vertex!(PosTexNormTan, position, tex_coord, normal, tangent);
