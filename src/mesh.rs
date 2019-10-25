@@ -134,7 +134,7 @@ fn tangent_bitangent_for_face(face: &[PosTexNorm; 3]) -> (Vec3, Vec3) {
     (tangent, bitangent)
 }
 
-pub fn load_obj(queue: Queue, render_pass: RenderPass, path: &Path) -> Vec<RenderableObject> {
+pub fn load_obj(queue: Queue, render_pass: RenderPass, path: &Path, vs_path: PathBuf, fs_path: PathBuf) -> Vec<RenderableObject> {
     // loads every object in an OBJ file
     // each object has the following descriptors in custom_sets:
     //     - set 0, binding 0: basic material properties (ambient, diffuse, etc.)
@@ -150,8 +150,8 @@ pub fn load_obj(queue: Queue, render_pass: RenderPass, path: &Path) -> Vec<Rende
         phantom: PhantomData::<PosTexNormTan>,
     };
     let pipeline_spec = PipelineSpec {
-        vs_path: relative_path("shaders/obj-viewer/vert.glsl"),
-        fs_path: relative_path("shaders/obj-viewer/frag.glsl"),
+        vs_path: vs_path.clone(),
+        fs_path: fs_path.clone(),
         fill_type: PrimitiveTopology::TriangleList,
         read_depth: true,
         write_depth: true,
@@ -242,8 +242,8 @@ pub fn load_obj(queue: Queue, render_pass: RenderPass, path: &Path) -> Vec<Rende
             let texture_set = mat_buffers_and_texture_sets[*material_idx].1.clone();
 
             ObjectPrototype {
-                vs_path: relative_path("shaders/obj-viewer/vert.glsl"),
-                fs_path: relative_path("shaders/obj-viewer/frag.glsl"),
+                vs_path: vs_path.clone(),
+                fs_path: fs_path.clone(),
                 fill_type: PrimitiveTopology::TriangleList,
                 read_depth: true,
                 write_depth: true,
