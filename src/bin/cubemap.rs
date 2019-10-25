@@ -170,20 +170,20 @@ fn convert_to_shadow_casters(
     // for now this function assumes a 6x1 patch layout
     let view_directions = [
         vec3(1.0, 0.0, 0.0),
-        vec3(0.0, 1.0, 0.0),
-        vec3(0.0, 0.0, 1.0),
         vec3(-1.0, 0.0, 0.0),
+        vec3(0.0, 1.0, 0.0),
         vec3(0.0, -1.0, 0.0),
+        vec3(0.0, 0.0, 1.0),
         vec3(0.0, 0.0, -1.0),
     ];
 
     let up_directions = [
-        vec3(0.0, 1.0, 0.0),
-        vec3(1.0, 0.0, 0.0),
-        vec3(0.0, 1.0, 0.0),
-        vec3(0.0, 1.0, 0.0),
-        vec3(1.0, 0.0, 0.0),
-        vec3(0.0, 1.0, 0.0),
+        vec3(0.0, -1.0, 0.0),
+        vec3(0.0, -1.0, 0.0),
+        vec3(0.0, 0.0, 1.0),
+        vec3(0.0, 0.0, -1.0),
+        vec3(0.0, -1.0, 0.0),
+        vec3(0.0, -1.0, 0.0),
     ];
 
     let patch_positions = [
@@ -236,7 +236,7 @@ fn convert_to_shadow_casters(
 }
 
 fn create_projection_set(queue: Queue, pipeline: Pipeline) -> Set {
-    let (near, far) = (0.1, 250.0);
+    let (near, far) = (1.0, 250.0);
     // pi / 2 = 90 deg., 1.0 = aspect ratio
     let proj_data: [[f32; 4]; 4] = perspective(1.0, std::f32::consts::PI / 2.0, near, far).into();
     let proj_buffer = bufferize_data(queue, proj_data);

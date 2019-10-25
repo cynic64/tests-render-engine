@@ -37,11 +37,21 @@ vec2 l_to_shadow_map_uv(vec3 v) {
   return uv;
 }
 
-void main() {
+bool is_in_shadow() {
   // light is in center
   vec3 light_dir = normalize(v_pos);
   vec2 coords = l_to_shadow_map_uv(light_dir);
-  float depth = texture(shadow_map, coords).r;
-  vec3 depth_comp = vec3(pow(depth, 20.0));
-  f_color = vec4(normalize(v_normal + depth_comp), 1.0);
+  float sample_dist = texture(shadow_map, coords).r * 250.0;
+
+  // because light is in center, this works
+  float frag_dist = length(v_pos);
+  float bias = 0.005;
+
+  // idk why i have to invert it
+  return !(sample_dist + bias > frag_dist);
+}
+
+void main() {
+  float shadow = is_in_shadow() ? 1.0 : 0.0;
+  f_color = vec4(vec3(1.0 - shadow), 1.0);
 }
