@@ -36,30 +36,31 @@ fn main() {
     )
     .unwrap();
     let mut depth_view_custom_images = HashMap::new();
-    depth_view_custom_images.insert("patched_shadow", patched_shadow_image);
+    depth_view_custom_images.insert("shadow_map", patched_shadow_image);
 
     let rpass1 = render_passes::only_depth(device.clone());
-    let rpass2 = render_passes::with_depth(device.clone());
+    let rpass2 = render_passes::basic(device.clone());
     let mut system = System::new(
         queue.clone(),
         vec![
+            // renders to shadow cubemap
             Pass {
-                name: "geometry",
-                images_created_tags: vec!["patched_shadow"],
+                name: "shadow",
+                images_created_tags: vec!["shadow_map"],
                 images_needed_tags: vec![],
                 render_pass: rpass1.clone(),
                 custom_images: HashMap::new(),
             },
+            // displays shadow map for debugging
             Pass {
-                name: "depth_view",
-                // also creates its own depth buffer
-                images_created_tags: vec!["depth_view", "depth"],
-                images_needed_tags: vec!["patched_shadow"],
+                name: "cubemap_view",
+                images_created_tags: vec!["cubemap_view"],
+                images_needed_tags: vec!["shadow_map"],
                 render_pass: rpass2.clone(),
                 custom_images: depth_view_custom_images,
             },
         ],
-        "depth_view",
+        "cubemap_view",
     );
     window.set_render_pass(rpass1.clone());
 
@@ -84,8 +85,8 @@ fn main() {
     };
 
     let mut base_dragon = ObjectPrototype {
-        vs_path: relative_path("shaders/cubemap/vert.glsl"),
-        fs_path: relative_path("shaders/cubemap/frag.glsl"),
+        vs_path: relative_path("shaders/cubemap/shadow_cast_vert.glsl"),
+        fs_path: relative_path("shaders/cubemap/shadow_cast_frag.glsl"),
         fill_type: PrimitiveTopology::TriangleList,
         read_depth: true,
         write_depth: true,
@@ -101,21 +102,34 @@ fn main() {
     let model_set = pds_for_buffers(pipe_dragon.clone(), &[model_buffer], 0).unwrap();
     base_dragon.custom_sets = vec![model_set];
 
-    // create cube to visualize cubemap on
-    let cube_mesh = load_obj_positions_only(&relative_path("meshes/cube.obj"));
-    let cube = ObjectPrototype {
-        vs_path: relative_path("shaders/cubemap/depth_view_vert.glsl"),
-        fs_path: relative_path("shaders/cubemap/depth_view_frag.glsl"),
-        fill_type: PrimitiveTopology::TriangleList,
-        read_depth: true,
-        write_depth: true,
-        mesh: cube_mesh,
+    // create fullscreen quad to debug cubemap
+    let quad = ObjectPrototype {
+        vs_path: relative_path("shaders/cubemap/display_cubemap_vert.glsl"),
+        fs_path: relative_path("shaders/cubemap/display_cubemap_frag.glsl"),
+        fill_type: PrimitiveTopology::TriangleStrip,
+        read_depth: false,
+        write_depth: false,
+        mesh: Mesh {
+            vertices: vec![
+                V2D {
+                    position: [-1.0, -1.0],
+                },
+                V2D {
+                    position: [-1.0, 1.0],
+                },
+                V2D {
+                    position: [1.0, -1.0],
+                },
+                V2D {
+                    position: [1.0, 1.0],
+                },
+            ],
+            indices: vec![0, 1, 2, 3],
+        },
         custom_sets: vec![],
         custom_dynamic_state: None,
     }
     .into_renderable_object(queue.clone());
-
-    let pipe_cube = cube.pipeline_spec.concrete(device.clone(), rpass2.clone());
 
     // create buffer for shadow projection matrix
     let (near, far) = (1.0, 250.0);
@@ -131,22 +145,12 @@ fn main() {
 
     // used in main loop
     let mut all_objects = HashMap::new();
-    all_objects.insert("geometry", dragons);
+    all_objects.insert("shadow", dragons);
+    all_objects.insert("cubemap_view", vec![quad]);
 
     while !window.update() {
         // update camera and camera buffer
         camera.update(window.get_frame_info());
-
-        let camera_buffer = camera.get_buffer(queue.clone());
-        let camera_set_cube =
-            pds_for_buffers(pipe_cube.clone(), &[camera_buffer.clone()], 1).unwrap();
-
-        // add camera set to cube
-        let mut cur_cube = cube.clone();
-        cur_cube.custom_sets.push(camera_set_cube);
-
-        // replace old "geometry" object list
-        all_objects.insert("depth_view", vec![cur_cube]);
 
         // draw
         system.render_to_window(&mut window, all_objects.clone());
@@ -243,35 +247,7 @@ fn dynamic_state_for_bounds(origin: [f32; 2], dimensions: [f32; 2]) -> DynamicSt
 }
 
 #[derive(Default, Debug, Clone, Copy)]
-struct V3D {
-    position: [f32; 3],
+struct V2D {
+    position: [f32; 2],
 }
-vulkano::impl_vertex!(V3D, position);
-
-fn load_obj_positions_only(path: &Path) -> Mesh<V3D> {
-    // loads the first mesh in an obj file, extracting only position information
-    let (models, _materials) = tobj::load_obj(path).expect("Couldn't load OBJ file");
-
-    // only use first mesh
-    let mesh = &models[0].mesh;
-    let mut vertices: Vec<V3D> = vec![];
-
-    for i in 0..mesh.positions.len() / 3 {
-        let pos = [
-            mesh.positions[i * 3],
-            mesh.positions[i * 3 + 1],
-            mesh.positions[i * 3 + 2],
-        ];
-        let vertex = V3D { position: pos };
-
-        vertices.push(vertex);
-    }
-
-    println!("Vertices: {}", vertices.len());
-    println!("Indices: {}", mesh.indices.len());
-
-    Mesh {
-        vertices,
-        indices: mesh.indices.clone(),
-    }
-}
+vulkano::impl_vertex!(V2D, position);
