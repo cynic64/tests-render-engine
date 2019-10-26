@@ -25,8 +25,8 @@ const SHADOW_MAP_DIMS: [u32; 2] = [12_288, 2048];
 const PATCH_DIMS: [f32; 2] = [2048.0, 2048.0];
 */
 
-const SHADOW_MAP_DIMS: [u32; 2] = [6_144, 1024];
-const PATCH_DIMS: [f32; 2] = [1024.0, 1024.0];
+const SHADOW_MAP_DIMS: [u32; 2] = [3_072, 512];
+const PATCH_DIMS: [f32; 2] = [512.0, 512.0];
 
 fn main() {
     // initialize window
@@ -42,7 +42,8 @@ fn main() {
     .unwrap();
     let shadow_blur: Image = vulkano::image::AttachmentImage::sampled(
         device.clone(),
-        SHADOW_MAP_DIMS,
+        // SHADOW_MAP_DIMS,
+        [SHADOW_MAP_DIMS[0] * 2, SHADOW_MAP_DIMS[1] * 2],
         Format::D32Sfloat,
     )
     .unwrap();
@@ -262,7 +263,7 @@ impl MovingLight {
         let data = Light {
             // position: [time.sin(), 10.0, time.cos(), 0.0],
             position: [time.sin() * 100.0, 10.0, 0.0, 0.0],
-            strength: 2.0,
+            strength: 1.0,
         };
 
         bufferize_data(queue.clone(), data)
@@ -336,8 +337,9 @@ fn convert_to_shadow_casters(
 
             // dynamic state for the current dragon, represents which part
             // of the patched texture we draw to
-            let origin = [patch_pos[0] * PATCH_DIMS[0], patch_pos[1] * PATCH_DIMS[1]];
-            let dynamic_state = dynamic_state_for_bounds(origin, PATCH_DIMS);
+            let margin = 0.0;
+            let origin = [patch_pos[0] * PATCH_DIMS[0] + margin, patch_pos[1] * PATCH_DIMS[1] + margin];
+            let dynamic_state = dynamic_state_for_bounds(origin, [PATCH_DIMS[0] - margin * 2.0, PATCH_DIMS[1] - margin * 2.0]);
 
             RenderableObject {
                 // model and proj are in set 0 and 1
@@ -352,7 +354,8 @@ fn convert_to_shadow_casters(
 fn create_projection_set(queue: Queue, pipeline: Pipeline) -> Set {
     let (near, far) = (1.0, 250.0);
     // pi / 2 = 90 deg., 1.0 = aspect ratio
-    let proj_data: [[f32; 4]; 4] = perspective(1.0, std::f32::consts::PI / 2.0, near, far).into();
+    // we use a fov 1% too big to make sure sampling doesn't go between patches
+    let proj_data: [[f32; 4]; 4] = perspective(1.0, std::f32::consts::PI / 2.0 * 1.01, near, far).into();
     let proj_buffer = bufferize_data(queue, proj_data);
 
     pds_for_buffers(pipeline, &[proj_buffer], 1).unwrap()

@@ -36,6 +36,20 @@ layout(set = 3, binding = 1) uniform Light {
   vec3 strength; // vec3 really means float, idk why it doesn't work
 } light;
 
+float A = 0.15;
+float B = 0.50;
+float C = 0.10;
+float D = 0.20;
+float E = 0.02;
+float F = 0.30;
+float W = 11.2;
+
+// taken from: http://filmicworlds.com/blog/filmic-tonemapping-operators/
+vec3 Uncharted2Tonemap(vec3 x)
+{
+  return ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F;
+}
+
 // cube faces +x, -x, +y, -y, +z, -z in a row
 // taken from: http://blue2rgb.sydneyzh.com/rendering-dynamic-cube-maps-for-omni-light-shadows-with-vulkan-api.html
 vec2 l_to_shadow_map_uv(vec3 v) {
@@ -62,6 +76,7 @@ vec2 l_to_shadow_map_uv(vec3 v) {
       uv = vec2(v.x < 0.0 ? v.z : -v.z, -v.y);
     }
   uv = uv * ma + 0.5;
+  uv = uv * 0.9921875 + 0.00390625;
   uv.x = (uv.x + face_index) / 6.f;
   return uv;
 }
@@ -116,9 +131,24 @@ void main() {
   float shadow = shadowedness();
   vec3 result = ambient + (1.0 - shadow) * (diffuse + specular) * light.strength.r / (dist * dist / 2000.0);
 
-  // gamma correction
+  // gamma correction and reinhard
+  /*
+  vec3 mapped = result / (result + vec3(1.0));
   float gamma = 2.2;
-  result = pow(result, vec3(1.0/gamma));
+  vec3 corrected = pow(mapped, vec3(1.0/gamma));
+  */
 
-  f_color = vec4(result, 1.0);
+  // uncharted 2 tone mapping
+  result *= 16;
+  float exposure_bias = 2.0;
+  vec3 curr = Uncharted2Tonemap(exposure_bias * result);
+
+  /*
+  vec3 white_scale = 1.0 / Uncharted2Tonemap(vec3(W));
+  vec3 color = curr * white_scale;
+  */
+
+  vec3 corrected = pow(curr, vec3(1/2.2));
+
+  f_color = vec4(corrected, 1.0);
 }
