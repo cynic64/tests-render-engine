@@ -25,8 +25,8 @@ const SHADOW_MAP_DIMS: [u32; 2] = [12_288, 2048];
 const PATCH_DIMS: [f32; 2] = [2048.0, 2048.0];
 */
 
-const SHADOW_MAP_DIMS: [u32; 2] = [3072, 512];
-const PATCH_DIMS: [f32; 2] = [512.0, 512.0];
+const SHADOW_MAP_DIMS: [u32; 2] = [6_144, 1024];
+const PATCH_DIMS: [f32; 2] = [1024.0, 1024.0];
 
 fn main() {
     // initialize window
@@ -34,17 +34,25 @@ fn main() {
     let device = queue.device().clone();
 
     // create system
-    let patched_shadow_image: Image = vulkano::image::AttachmentImage::sampled(
+    let patched_shadow: Image = vulkano::image::AttachmentImage::sampled(
+        device.clone(),
+        SHADOW_MAP_DIMS,
+        Format::D32Sfloat,
+    )
+    .unwrap();
+    let shadow_blur: Image = vulkano::image::AttachmentImage::sampled(
         device.clone(),
         SHADOW_MAP_DIMS,
         Format::D32Sfloat,
     )
     .unwrap();
     let mut custom_images = HashMap::new();
-    custom_images.insert("shadow_map", patched_shadow_image);
+    custom_images.insert("shadow_map", patched_shadow);
+    custom_images.insert("shadow_map_blur", shadow_blur);
 
     let render_pass = render_passes::multisampled_with_depth(device.clone(), 4);
     let rpass_shadow = render_passes::only_depth(device.clone());
+    let rpass_shadow_blur = render_passes::only_depth(device.clone());
     let rpass_cubeview = render_passes::basic(device.clone());
 
     let mut system = System::new(
@@ -57,11 +65,18 @@ fn main() {
                 images_needed_tags: vec![],
                 render_pass: rpass_shadow.clone(),
             },
+            // blurs shadow cubemap
+            Pass {
+                name: "shadow_blur",
+                images_created_tags: vec!["shadow_map_blur"],
+                images_needed_tags: vec!["shadow_map"],
+                render_pass: rpass_shadow_blur.clone(),
+            },
             // displays shadow map for debugging
             Pass {
                 name: "cubemap_view",
                 images_created_tags: vec!["cubemap_view"],
-                images_needed_tags: vec!["shadow_map"],
+                images_needed_tags: vec!["shadow_map_blur"],
                 render_pass: rpass_cubeview.clone(),
             },
             Pass {
@@ -72,7 +87,7 @@ fn main() {
                     "multisampled_depth",
                     "resolve_depth",
                 ],
-                images_needed_tags: vec!["shadow_map"],
+                images_needed_tags: vec!["shadow_map_blur"],
                 render_pass: render_pass.clone(),
             },
         ],
@@ -100,11 +115,19 @@ fn main() {
 
     // shadow stuff
     // create fullscreen quad to debug cubemap
-    let quad = fullscreen_quad(
+    let quad_display = fullscreen_quad(
         queue.clone(),
-        relative_path("shaders/pretty/display_cubemap_vert.glsl"),
+        relative_path("shaders/pretty/fullscreen_vert.glsl"),
         relative_path("shaders/pretty/display_cubemap_frag.glsl"),
     );
+
+    // and to blur shadow map
+    let mut quad_blur = fullscreen_quad(
+        queue.clone(),
+        relative_path("shaders/pretty/fullscreen_vert.glsl"),
+        relative_path("shaders/pretty/blur_frag.glsl"),
+    );
+    quad_blur.pipeline_spec.write_depth = true;
 
     let pipe_spec_caster = PipelineSpec {
         vs_path: relative_path("shaders/pretty/shadow_cast_vert.glsl"),
@@ -151,7 +174,8 @@ fn main() {
     let mut timer_setup = Timer::new("Setup time");
     let mut timer_draw = Timer::new("Overall draw time");
 
-    all_objects.insert("cubemap_view", vec![quad]);
+    all_objects.insert("cubemap_view", vec![quad_display]);
+    all_objects.insert("shadow_blur", vec![quad_blur]);
 
     while !window.update() {
         timer_setup.start();

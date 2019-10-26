@@ -66,7 +66,7 @@ vec2 l_to_shadow_map_uv(vec3 v) {
   return uv;
 }
 
-bool is_in_shadow() {
+float shadowedness() {
   vec3 light_dir = normalize(v_pos - light.position);
   vec2 coords = l_to_shadow_map_uv(light_dir);
   float sample_dist = texture(shadow_map, coords).r * 250.0;
@@ -75,7 +75,10 @@ bool is_in_shadow() {
   float bias = 0.05;
 
   // idk why i have to invert it
-  return !(sample_dist + bias > frag_dist);
+  float difference = abs(sample_dist - frag_dist);
+
+  return clamp(difference, 0.0, 1.0);
+  /* return !(sample_dist + bias > frag_dist); */
 }
 
 void main() {
@@ -109,8 +112,9 @@ void main() {
   // result
   /* vec3 result = ambient + (diffuse + specular) * light.strength.r; */
   float dist = length(tan_light_pos - tan_frag_pos);
-  float shadow = is_in_shadow() ? 1.0 : 0.0;
-  vec3 result = ambient + (1.0 - shadow) * (diffuse + specular) * light.strength.r / (dist * dist / 500.0);
+  /* float shadow = is_in_shadow() ? 1.0 : 0.0; */
+  float shadow = shadowedness();
+  vec3 result = ambient + (1.0 - shadow) * (diffuse + specular) * light.strength.r / (dist * dist / 2000.0);
 
   // gamma correction
   float gamma = 2.2;
