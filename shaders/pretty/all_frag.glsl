@@ -100,9 +100,12 @@ void main() {
   // only use the texture if we should
   vec4 tex_diffuse = material.use_texture.r > 0.5 ? texture(diffuse_map, v_tex_coord) : vec4(material.diffuse, 1.0);
 
+  // doesn't play nice with depth prepass
+  /*
   if (tex_diffuse.a < 0.5) {
     discard;
   }
+  */
 
   vec3 tex_specular = texture(specular_map, v_tex_coord).rgb;
 

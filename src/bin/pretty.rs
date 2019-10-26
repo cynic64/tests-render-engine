@@ -1,6 +1,7 @@
 use render_engine as re;
 
 use re::collection_cache::pds_for_buffers;
+use re::input::get_elapsed;
 use re::mesh::{ObjectPrototype, PrimitiveTopology, VertexType};
 use re::pipeline_cache::PipelineSpec;
 use re::render_passes;
@@ -8,7 +9,6 @@ use re::system::{Pass, RenderableObject, System};
 use re::utils::{bufferize_data, Timer};
 use re::window::Window;
 use re::{Buffer, Format, Image, Pipeline, Queue, Set};
-use re::input::get_elapsed;
 
 use vulkano::command_buffer::DynamicState;
 use vulkano::pipeline::viewport::Viewport;
@@ -51,10 +51,12 @@ fn main() {
     custom_images.insert("shadow_map", patched_shadow);
     custom_images.insert("shadow_map_blur", shadow_blur);
 
-    let render_pass = render_passes::multisampled_with_depth(device.clone(), 4);
+    let render_pass = render_passes::read_depth(device.clone());
     let rpass_shadow = render_passes::only_depth(device.clone());
     let rpass_shadow_blur = render_passes::only_depth(device.clone());
     let rpass_cubeview = render_passes::basic(device.clone());
+    let rpass_prepass = render_passes::only_depth(device.clone());
+    let rpass_ssao = render_passes::basic(device.clone());
 
     let mut system = System::new(
         queue.clone(),
@@ -73,27 +75,41 @@ fn main() {
                 images_needed_tags: vec!["shadow_map"],
                 render_pass: rpass_shadow_blur.clone(),
             },
-            // displays shadow map for debugging
+            // depth prepass
             Pass {
-                name: "cubemap_view",
-                images_created_tags: vec!["cubemap_view"],
-                images_needed_tags: vec!["shadow_map_blur"],
+                name: "depth_prepass",
+                images_created_tags: vec!["depth_prepass"],
+                images_needed_tags: vec![],
+                render_pass: rpass_prepass.clone(),
+            },
+            // displays any depth buffer for debugging
+            Pass {
+                name: "depth_viewer",
+                images_created_tags: vec!["depth_view"],
+                // images_needed_tags: vec!["shadow_map_blur"],
+                images_needed_tags: vec!["depth_prepass"],
                 render_pass: rpass_cubeview.clone(),
             },
+            // ssao
+            /*
+            Pass {
+                name: "ssao",
+                images_created_tags: vec!["ssao"],
+                // images_needed_tags: vec!["shadow_map_blur"],
+                images_needed_tags: vec!["depth_prepass"],
+                render_pass: rpass_ssao.clone(),
+            },
+            */
+            // final pass
             Pass {
                 name: "geometry",
-                images_created_tags: vec![
-                    "resolve_color",
-                    "multisampled_color",
-                    "multisampled_depth",
-                    "resolve_depth",
-                ],
+                images_created_tags: vec!["color", "depth_prepass"],
                 images_needed_tags: vec!["shadow_map_blur"],
                 render_pass: render_pass.clone(),
             },
         ],
         custom_images,
-        "resolve_color",
+        "ssao",
     );
 
     window.set_render_pass(render_pass.clone());
@@ -140,6 +156,13 @@ fn main() {
     };
     let pipe_caster = pipe_spec_caster.concrete(device.clone(), rpass_shadow.clone());
 
+    let pipe_spec_prepass = PipelineSpec {
+        vs_path: relative_path("shaders/pretty/depth_prepass_vert.glsl"),
+        fs_path: relative_path("shaders/pretty/depth_prepass_frag.glsl"),
+        ..pipe_spec_caster.clone()
+    };
+    let pipe_prepass = pipe_spec_prepass.concrete(device.clone(), rpass_prepass.clone());
+
     // concatenate all meshes
     // we load them a second time, which i'd like to change at some point
     let meshes: Vec<_> = tobj::load_obj(&relative_path("meshes/sponza/sponza.obj"))
@@ -175,15 +198,19 @@ fn main() {
     let mut timer_setup = Timer::new("Setup time");
     let mut timer_draw = Timer::new("Overall draw time");
 
-    all_objects.insert("cubemap_view", vec![quad_display]);
+    all_objects.insert("depth_viewer", vec![quad_display]);
     all_objects.insert("shadow_blur", vec![quad_blur]);
 
     while !window.update() {
         timer_setup.start();
 
         // convert merged mesh into 6 casters, one for each cubemap face
-        let shadow_casters =
-            convert_to_shadow_casters(queue.clone(), pipe_caster.clone(), merged_object.clone(), light.get_position());
+        let shadow_casters = convert_to_shadow_casters(
+            queue.clone(),
+            pipe_caster.clone(),
+            merged_object.clone(),
+            light.get_position(),
+        );
         // update camera and light
         camera.update(window.get_frame_info());
         let camera_buffer = camera.get_buffer(queue.clone());
@@ -191,14 +218,15 @@ fn main() {
         let light_buffer = light.get_buffer(queue.clone());
         // used for color pass
         let camera_light_set =
-            pds_for_buffers(pipeline.clone(), &[camera_buffer, light_buffer.clone()], 3).unwrap(); // 0 is the descriptor set idx
-        // used for shadow pass
+            pds_for_buffers(pipeline.clone(), &[camera_buffer.clone(), light_buffer.clone()], 3).unwrap(); // 0 is the descriptor set idx
+                                                                                                   // used for shadow pass
         let light_set = pds_for_buffers(pipe_caster.clone(), &[light_buffer], 3).unwrap();
+        let camera_set = pds_for_buffers(pipe_prepass.clone(), &[camera_buffer], 1).unwrap();
 
         system.output_tag = if window.get_frame_info().keys_down.c {
-            "cubemap_view"
+            "depth_view"
         } else {
-            "resolve_color"
+            "color"
         };
 
         all_objects.insert(
@@ -207,6 +235,8 @@ fn main() {
                 .clone()
                 .iter_mut()
                 .map(|obj| {
+                    obj.pipeline_spec.write_depth = false;
+                    obj.pipeline_spec.read_depth = true;
                     // add camera set to each object before adding it to the scene
                     obj.custom_sets.push(camera_light_set.clone());
                     obj.clone()
@@ -226,6 +256,11 @@ fn main() {
                 })
                 .collect(),
         );
+
+        let mut depth_prepass_object = merged_object.clone();
+        depth_prepass_object.custom_sets.push(camera_set);
+        depth_prepass_object.pipeline_spec = pipe_spec_prepass.clone();
+        all_objects.insert("depth_prepass", vec![depth_prepass_object]);
         timer_setup.stop();
 
         // draw
@@ -338,8 +373,14 @@ fn convert_to_shadow_casters(
             // dynamic state for the current dragon, represents which part
             // of the patched texture we draw to
             let margin = 0.0;
-            let origin = [patch_pos[0] * PATCH_DIMS[0] + margin, patch_pos[1] * PATCH_DIMS[1] + margin];
-            let dynamic_state = dynamic_state_for_bounds(origin, [PATCH_DIMS[0] - margin * 2.0, PATCH_DIMS[1] - margin * 2.0]);
+            let origin = [
+                patch_pos[0] * PATCH_DIMS[0] + margin,
+                patch_pos[1] * PATCH_DIMS[1] + margin,
+            ];
+            let dynamic_state = dynamic_state_for_bounds(
+                origin,
+                [PATCH_DIMS[0] - margin * 2.0, PATCH_DIMS[1] - margin * 2.0],
+            );
 
             RenderableObject {
                 // model and proj are in set 0 and 1
@@ -355,7 +396,8 @@ fn create_projection_set(queue: Queue, pipeline: Pipeline) -> Set {
     let (near, far) = (1.0, 250.0);
     // pi / 2 = 90 deg., 1.0 = aspect ratio
     // we use a fov 1% too big to make sure sampling doesn't go between patches
-    let proj_data: [[f32; 4]; 4] = perspective(1.0, std::f32::consts::PI / 2.0 * 1.01, near, far).into();
+    let proj_data: [[f32; 4]; 4] =
+        perspective(1.0, std::f32::consts::PI / 2.0 * 1.01, near, far).into();
     let proj_buffer = bufferize_data(queue, proj_data);
 
     pds_for_buffers(pipeline, &[proj_buffer], 1).unwrap()
