@@ -2,9 +2,13 @@
 
 layout(location = 0) in vec3 v_pos;
 
+layout(set = 3, binding = 0) uniform Light {
+  vec3 position;
+  vec3 strength;
+} light;
+
 void main() {
-  // 0, 10, 0 is light's pos
-  float light_dist = length(v_pos - vec3(0.0, 10.0, 0.0));
+  float light_dist = length(v_pos - light.position);
 
   // map to 0, 1 by dividing by far plane
   light_dist /= 250.0;

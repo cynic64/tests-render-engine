@@ -5,9 +5,10 @@ use re::mesh::{ObjectPrototype, PrimitiveTopology, VertexType};
 use re::pipeline_cache::PipelineSpec;
 use re::render_passes;
 use re::system::{Pass, RenderableObject, System};
-use re::utils::bufferize_data;
+use re::utils::{bufferize_data, Timer};
 use re::window::Window;
 use re::{Buffer, Format, Image, Pipeline, Queue, Set};
+use re::input::get_elapsed;
 
 use vulkano::command_buffer::DynamicState;
 use vulkano::pipeline::viewport::Viewport;
@@ -20,11 +21,12 @@ use tests_render_engine::mesh::{convert_mesh, fullscreen_quad, load_obj, merge, 
 use tests_render_engine::{relative_path, FlyCamera};
 
 /*
-const SHADOW_MAP_DIMS: [u32; 2] = [6144, 1024];
-const PATCH_DIMS: [f32; 2] = [1024.0, 1024.0];
-*/
 const SHADOW_MAP_DIMS: [u32; 2] = [12_288, 2048];
 const PATCH_DIMS: [f32; 2] = [2048.0, 2048.0];
+*/
+
+const SHADOW_MAP_DIMS: [u32; 2] = [3072, 512];
+const PATCH_DIMS: [f32; 2] = [512.0, 512.0];
 
 fn main() {
     // initialize window
@@ -139,28 +141,40 @@ fn main() {
     }
     .into_renderable_object(queue.clone());
 
-    // convert merged mesh into 6 casters, one for each cubemap face
-    let shadow_casters =
-        convert_to_shadow_casters(queue.clone(), pipe_caster.clone(), merged_object);
-
     let mut all_objects = HashMap::new();
-    all_objects.insert("shadow", shadow_casters);
 
     // used in main loop
     let pipeline = objects[0]
         .pipeline_spec
         .concrete(device.clone(), render_pass.clone());
 
+    let mut timer_setup = Timer::new("Setup time");
+    let mut timer_draw = Timer::new("Overall draw time");
+
     all_objects.insert("cubemap_view", vec![quad]);
 
     while !window.update() {
+        timer_setup.start();
+
+        // convert merged mesh into 6 casters, one for each cubemap face
+        let shadow_casters =
+            convert_to_shadow_casters(queue.clone(), pipe_caster.clone(), merged_object.clone(), light.get_position());
         // update camera and light
         camera.update(window.get_frame_info());
         let camera_buffer = camera.get_buffer(queue.clone());
 
         let light_buffer = light.get_buffer(queue.clone());
+        // used for color pass
         let camera_light_set =
-            pds_for_buffers(pipeline.clone(), &[camera_buffer, light_buffer], 3).unwrap(); // 0 is the descriptor set idx
+            pds_for_buffers(pipeline.clone(), &[camera_buffer, light_buffer.clone()], 3).unwrap(); // 0 is the descriptor set idx
+        // used for shadow pass
+        let light_set = pds_for_buffers(pipe_caster.clone(), &[light_buffer], 3).unwrap();
+
+        system.output_tag = if window.get_frame_info().keys_down.c {
+            "cubemap_view"
+        } else {
+            "resolve_color"
+        };
 
         all_objects.insert(
             "geometry",
@@ -175,11 +189,31 @@ fn main() {
                 .collect(),
         );
 
+        all_objects.insert(
+            "shadow",
+            shadow_casters
+                .clone()
+                .iter_mut()
+                .map(|obj| {
+                    // add camera set to each object before adding it to the scene
+                    obj.custom_sets.push(light_set.clone());
+                    obj.clone()
+                })
+                .collect(),
+        );
+        timer_setup.stop();
+
         // draw
+        timer_draw.start();
         system.render_to_window(&mut window, all_objects.clone());
+        timer_draw.stop();
     }
 
+    system.print_stats();
     println!("FPS: {}", window.get_fps());
+    println!("Avg. delta: {} ms", window.get_avg_delta() * 1_000.0);
+    timer_setup.print();
+    timer_draw.print();
 }
 
 #[allow(dead_code)]
@@ -200,14 +234,19 @@ impl MovingLight {
     }
 
     fn get_buffer(&self, queue: Queue) -> Buffer {
-        // let time = get_elapsed(self.start_time) / 4.0;
+        let time = get_elapsed(self.start_time) / 16.0;
         let data = Light {
             // position: [time.sin(), 10.0, time.cos(), 0.0],
-            position: [0.0, 10.0, 0.0, 0.0],
+            position: [time.sin() * 100.0, 10.0, 0.0, 0.0],
             strength: 2.0,
         };
 
         bufferize_data(queue.clone(), data)
+    }
+
+    fn get_position(&self) -> [f32; 3] {
+        let time = get_elapsed(self.start_time) / 16.0;
+        [time.sin() * 100.0, 10.0, 0.0]
     }
 }
 
@@ -215,6 +254,7 @@ fn convert_to_shadow_casters(
     queue: Queue,
     pipeline: Pipeline,
     base_object: RenderableObject,
+    light_pos: [f32; 3],
 ) -> Vec<RenderableObject> {
     // if you want to make point lamps cast shadows, you need shadow cubemaps
     // render-engine doesn't support geometry shaders, so the easiest way to do
@@ -254,12 +294,13 @@ fn convert_to_shadow_casters(
     let model_buffer = bufferize_data(queue.clone(), model_data);
     let model_set = pds_for_buffers(pipeline.clone(), &[model_buffer], 0).unwrap();
 
+    let light_pos = make_vec3(&light_pos);
+
     view_directions
         .iter()
         .zip(&up_directions)
         .zip(&patch_positions)
         .map(|((dir, up), patch_pos): ((&Vec3, &Vec3), &[f32; 2])| {
-            let light_pos = vec3(0.0, 10.0, 0.0);
             let view_matrix: [[f32; 4]; 4] = look_at(&light_pos, &(light_pos + dir), up).into();
             let view_buffer = bufferize_data(queue.clone(), view_matrix);
             let set = pds_for_buffers(pipeline.clone(), &[view_buffer], 2).unwrap();

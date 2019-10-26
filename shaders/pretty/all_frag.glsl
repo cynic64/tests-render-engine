@@ -67,13 +67,11 @@ vec2 l_to_shadow_map_uv(vec3 v) {
 }
 
 bool is_in_shadow() {
-  // light at 0 10 0
-  vec3 light_dir = normalize(v_pos - vec3(0.0, 10.0, 0.0));
+  vec3 light_dir = normalize(v_pos - light.position);
   vec2 coords = l_to_shadow_map_uv(light_dir);
   float sample_dist = texture(shadow_map, coords).r * 250.0;
 
-  // because light is in center, this works
-  float frag_dist = length(v_pos - vec3(0.0, 10.0, 0.0));
+  float frag_dist = length(v_pos - light.position);
   float bias = 0.05;
 
   // idk why i have to invert it

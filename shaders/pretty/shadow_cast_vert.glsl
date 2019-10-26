@@ -15,6 +15,11 @@ layout(set = 2, binding = 0) uniform View {
   mat4 view;
 } shadow_view;
 
+layout(set = 3, binding = 0) uniform Light {
+  vec3 position;
+  vec3 strength;
+} light;
+
 void main() {
   v_pos = vec3(model.model * vec4(position, 1.0));
   gl_Position = shadow_proj.proj * shadow_view.view * vec4(v_pos, 1.0);
