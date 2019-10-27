@@ -133,7 +133,7 @@ impl OrbitCamera {
                 // fov
                 1.0,
                 // near
-                0.1,
+                1.0,
                 // far
                 10_000.,
             ),
@@ -266,7 +266,7 @@ impl FlyCamera {
                 // fov
                 1.0,
                 // near
-                0.1,
+                1.0,
                 // far
                 10_000.,
             ),

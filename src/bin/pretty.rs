@@ -56,7 +56,6 @@ fn main() {
     let rpass_shadow_blur = render_passes::only_depth(device.clone());
     let rpass_cubeview = render_passes::basic(device.clone());
     let rpass_prepass = render_passes::only_depth(device.clone());
-    let rpass_ssao = render_passes::basic(device.clone());
 
     let mut system = System::new(
         queue.clone(),
@@ -90,26 +89,16 @@ fn main() {
                 images_needed_tags: vec!["depth_prepass"],
                 render_pass: rpass_cubeview.clone(),
             },
-            // ssao
-            /*
-            Pass {
-                name: "ssao",
-                images_created_tags: vec!["ssao"],
-                // images_needed_tags: vec!["shadow_map_blur"],
-                images_needed_tags: vec!["depth_prepass"],
-                render_pass: rpass_ssao.clone(),
-            },
-            */
             // final pass
             Pass {
                 name: "geometry",
                 images_created_tags: vec!["color", "depth_prepass"],
-                images_needed_tags: vec!["shadow_map_blur"],
+                images_needed_tags: vec!["shadow_map_blur", "depth_prepass"],
                 render_pass: render_pass.clone(),
             },
         ],
         custom_images,
-        "ssao",
+        "color",
     );
 
     window.set_render_pass(render_pass.clone());
