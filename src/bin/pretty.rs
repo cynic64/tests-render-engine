@@ -93,7 +93,7 @@ fn main() {
             Pass {
                 name: "geometry",
                 images_created_tags: vec!["color", "depth_prepass"],
-                images_needed_tags: vec!["shadow_map_blur", "depth_prepass"],
+                images_needed_tags: vec!["shadow_map_blur"],
                 render_pass: render_pass.clone(),
             },
         ],
