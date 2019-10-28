@@ -118,7 +118,7 @@ fn main() {
     let model_buffer = bufferize_data(queue.clone(), model_data);
 
     // load objects
-    let objects = load_obj(
+    let mut objects = load_obj(
         queue.clone(),
         render_pass.clone(),
         &relative_path("meshes/sponza/sponza.obj"),
@@ -267,12 +267,22 @@ fn main() {
                 0 => {
                     // default: everything enabled
                     system.output_tag = "color";
-                }
+                },
                 1 => {
+                    // pur white
+                    objects.iter_mut().for_each(|obj| {
+                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/white_frag.glsl");
+                    });
+                    system.output_tag = "color";
+                },
+                2 => {
                     // depth only
                     system.output_tag = "depth_view";
-                }
+                },
                 _ => {
+                    objects.iter_mut().for_each(|obj| {
+                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/all_frag.glsl");
+                    });
                     view_mode = 0;
                     system.output_tag = "color";
                 },
