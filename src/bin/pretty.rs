@@ -217,7 +217,8 @@ fn main() {
     all_objects.insert("depth_viewer", vec![quad_display]);
     all_objects.insert("shadow_blur", vec![quad_blur]);
 
-    let mut view_mode = 0;
+    let mut view_mode: i32 = 0;
+    let mut update_view = false;
 
     while !window.update() {
         timer_setup.start();
@@ -260,8 +261,9 @@ fn main() {
         light_object.pipeline_spec = pipe_spec_prepass.clone();
         all_objects.insert("depth_prepass", vec![depth_prepass_object, light_object]);
 
-        if window.get_frame_info().keydowns.contains(&VirtualKeyCode::C) {
+        if window.get_frame_info().keydowns.contains(&VirtualKeyCode::C) || update_view {
             view_mode += 1;
+            update_view = false;
 
             match view_mode {
                 0 => {
@@ -291,6 +293,35 @@ fn main() {
                     objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path = relative_path("shaders/pretty/diffuse_and_light_frag.glsl");
                     });
+                    system.output_tag = "color";
+                },
+                5 => {
+                    // diffuse and light distance + direction
+                    objects.iter_mut().for_each(|obj| {
+                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/diffuse_light_distance_frag.glsl");
+                    });
+                    system.output_tag = "color";
+                },
+                6 => {
+                    // diffuse and specular
+                    objects.iter_mut().for_each(|obj| {
+                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/diffuse_and_spec.glsl");
+                    });
+                    system.output_tag = "color";
+                },
+                7 => {
+                    // diffuse, specular, normal mapping
+                    objects.iter_mut().for_each(|obj| {
+                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/diffuse_spec_normal.glsl");
+                    });
+                    system.output_tag = "color";
+                },
+                8 => {
+                    // shadows only
+                    objects.iter_mut().for_each(|obj| {
+                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/shadows_only.glsl");
+                    });
+                    system.output_tag = "color";
                 },
                 _ => {
                     objects.iter_mut().for_each(|obj| {
@@ -300,6 +331,10 @@ fn main() {
                     system.output_tag = "color";
                 },
             }
+        }
+        if window.get_frame_info().keydowns.contains(&VirtualKeyCode::V) {
+            view_mode -= 2;
+            update_view = true;
         }
 
         let geometry_light_model_set =

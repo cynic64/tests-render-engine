@@ -54,7 +54,17 @@ void main() {
   float diff = max(dot(normal, light_dir), 0.0);
   vec3 diffuse = diff * tex_diffuse.rgb;
 
-  vec3 corrected = pow(diffuse, vec3(1/2.2));
+  // specular
+  vec3 view_dir = normalize(tan_cam_pos - tan_frag_pos);
+  vec3 halfway_dir = normalize(light_dir + view_dir);
+  float spec = pow(max(dot(normal, halfway_dir), 0.0), 32.0);
+  vec3 specular = vec3(clamp(0.2 * spec, 0.0, 0.5));
+
+  // result
+  float dist = length(tan_light_pos - tan_frag_pos);
+  vec3 result = ambient + (diffuse + specular) * light.strength.r / (dist * dist / 2000.0);
+
+  vec3 corrected = pow(result, vec3(1/2.2));
 
   f_color = vec4(corrected, 1.0);
 }

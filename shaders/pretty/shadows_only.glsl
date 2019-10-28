@@ -36,20 +36,6 @@ layout(set = 3, binding = 1) uniform Light {
   vec3 strength; // vec3 really means float, idk why it doesn't work
 } light;
 
-float A = 0.15;
-float B = 0.50;
-float C = 0.10;
-float D = 0.20;
-float E = 0.02;
-float F = 0.30;
-float W = 11.2;
-
-// taken from: http://filmicworlds.com/blog/filmic-tonemapping-operators/
-vec3 Uncharted2Tonemap(vec3 x)
-{
-  return ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F;
-}
-
 // cube faces +x, -x, +y, -y, +z, -z in a row
 // taken from: http://blue2rgb.sydneyzh.com/rendering-dynamic-cube-maps-for-omni-light-shadows-with-vulkan-api.html
 vec2 l_to_shadow_map_uv(vec3 v) {
@@ -93,51 +79,9 @@ float shadowedness() {
   float difference = abs(sample_dist - frag_dist);
 
   return clamp(difference, 0.0, 1.0);
-  /* return !(sample_dist + bias > frag_dist); */
 }
 
 void main() {
-  // only use the texture if we should
-  vec4 tex_diffuse = material.use_texture.r > 0.5 ? texture(diffuse_map, v_tex_coord) : vec4(material.diffuse, 1.0);
-
-  // doesn't play nice with depth prepass
-  /*
-  if (tex_diffuse.a < 0.5) {
-    discard;
-  }
-  */
-
-  vec3 tex_specular = texture(specular_map, v_tex_coord).rgb;
-
-  vec3 normal = texture(normal_map, v_tex_coord).rgb * 2.0 - 1.0;
-
-  // ambient
-  vec3 ambient = tex_diffuse.rgb * 0.01;
-
-  // diffuse
-  vec3 light_dir = normalize(tan_light_pos - tan_frag_pos);
-
-  float diff = max(dot(normal, light_dir), 0.0);
-  vec3 diffuse = diff * tex_diffuse.rgb;
-
-  // specular
-  vec3 view_dir = normalize(tan_cam_pos - tan_frag_pos);
-  vec3 halfway_dir = normalize(light_dir + view_dir);
-  float spec = pow(max(dot(normal, halfway_dir), 0.0), 32.0);
-  vec3 specular = vec3(clamp(0.2 * spec, 0.0, 0.5));
-
-  // result
-  float dist = length(tan_light_pos - tan_frag_pos);
   float shadow = shadowedness();
-
-  vec3 result = ambient + (1.0 - shadow) * (diffuse + specular) * light.strength.r / (dist * dist / 2000.0);
-
-  // uncharted 2 tone mapping
-  result *= 16;
-  float exposure_bias = 2.0;
-  vec3 curr = Uncharted2Tonemap(exposure_bias * result);
-
-  vec3 corrected = pow(curr, vec3(1/2.2));
-
-  f_color = vec4(corrected, 1.0);
+  f_color = vec4(vec3(1.0 - shadow), 1.0);
 }

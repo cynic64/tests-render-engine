@@ -40,9 +40,6 @@ void main() {
   // only use the texture if we should
   vec4 tex_diffuse = material.use_texture.r > 0.5 ? texture(diffuse_map, v_tex_coord) : vec4(material.diffuse, 1.0);
 
-  vec3 tex_specular = texture(specular_map, v_tex_coord).rgb;
-
-  // don't use normal map yet
   vec3 normal = vec3(0.0, 0.0, 1.0);
 
   // ambient
@@ -54,7 +51,11 @@ void main() {
   float diff = max(dot(normal, light_dir), 0.0);
   vec3 diffuse = diff * tex_diffuse.rgb;
 
-  vec3 corrected = pow(diffuse, vec3(1/2.2));
+  float dist = length(tan_light_pos - tan_frag_pos);
+  vec3 result = ambient + diffuse * light.strength.r / (dist * dist / 2000.0);
 
+  vec3 corrected = pow(result, vec3(1/2.2));
+
+  /* f_color = vec4(vec3(get_occlusion()), 1.0); */
   f_color = vec4(corrected, 1.0);
 }
