@@ -269,7 +269,7 @@ fn main() {
                     system.output_tag = "color";
                 },
                 1 => {
-                    // pur white
+                    // pure white
                     objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path = relative_path("shaders/pretty/white_frag.glsl");
                     });
@@ -278,6 +278,19 @@ fn main() {
                 2 => {
                     // depth only
                     system.output_tag = "depth_view";
+                },
+                3 => {
+                    // diffuse_only
+                    objects.iter_mut().for_each(|obj| {
+                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/diffuse_only_frag.glsl");
+                    });
+                    system.output_tag = "color";
+                },
+                4 => {
+                    // diffuse and light direction
+                    objects.iter_mut().for_each(|obj| {
+                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/diffuse_and_light_frag.glsl");
+                    });
                 },
                 _ => {
                     objects.iter_mut().for_each(|obj| {

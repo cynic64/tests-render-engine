@@ -233,17 +233,22 @@ impl FlyCamera {
         }
 
         // move if keys are down
+        let move_dist = if frame_info.keys_down.x {
+            frame_info.delta * 3.0
+        } else {
+            frame_info.delta
+        };
         if frame_info.keys_down.w {
-            self.move_forward(frame_info.delta);
+            self.move_forward(move_dist);
         }
         if frame_info.keys_down.a {
-            self.move_left(frame_info.delta);
+            self.move_left(move_dist);
         }
         if frame_info.keys_down.s {
-            self.move_backward(frame_info.delta);
+            self.move_backward(move_dist);
         }
         if frame_info.keys_down.d {
-            self.move_right(frame_info.delta);
+            self.move_right(move_dist);
         }
 
         // update front and right
