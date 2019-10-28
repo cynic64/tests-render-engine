@@ -1,7 +1,7 @@
 use render_engine as re;
 
 use re::collection_cache::pds_for_buffers;
-use re::input::get_elapsed;
+use re::input::{get_elapsed, VirtualKeyCode};
 use re::mesh::{ObjectPrototype, PrimitiveTopology, VertexType};
 use re::pipeline_cache::PipelineSpec;
 use re::render_passes;
@@ -17,7 +17,9 @@ use std::collections::HashMap;
 
 use nalgebra_glm::*;
 
-use tests_render_engine::mesh::{convert_mesh, fullscreen_quad, load_obj, merge, Vertex3D};
+use tests_render_engine::mesh::{
+    convert_mesh, fullscreen_quad, load_obj, load_obj_single, merge, Vertex3D,
+};
 use tests_render_engine::{relative_path, FlyCamera};
 
 const SHADOW_MAP_DIMS: [u32; 2] = [6_144, 1024];
@@ -111,17 +113,44 @@ fn main() {
     // light
     let light = MovingLight::new();
 
+    // a model buffer with .1 scale, used for a couple different objects
+    let model_data: [[f32; 4]; 4] = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
+    let model_buffer = bufferize_data(queue.clone(), model_data);
+
     // load objects
     let objects = load_obj(
         queue.clone(),
         render_pass.clone(),
         &relative_path("meshes/sponza/sponza.obj"),
-        // &relative_path("residential/street.obj"),
         relative_path("shaders/pretty/vert.glsl"),
         relative_path("shaders/pretty/all_frag.glsl"),
-        2  // textures set idx
+        2, // textures set idx
     );
     println!("Objects Loaded: {}", objects.len());
+
+    let pipeline = objects[0]
+        .pipeline_spec
+        .concrete(device.clone(), render_pass.clone());
+
+    // load sphere to show light's position
+    let sphere_mesh = load_obj_single(&relative_path("meshes/sphere.obj"));
+    let mut sphere = ObjectPrototype {
+        vs_path: relative_path("shaders/pretty/light_vert.glsl"),
+        fs_path: relative_path("shaders/pretty/light_frag.glsl"),
+        fill_type: PrimitiveTopology::TriangleList,
+        read_depth: true,
+        write_depth: true,
+        // merge converts to Vertex3D which is what we want
+        mesh: merge(&[sphere_mesh]),
+        custom_sets: vec![],
+        custom_dynamic_state: None,
+    }
+    .into_renderable_object(queue.clone());
+    let pipe_light = sphere
+        .pipeline_spec
+        .concrete(device.clone(), render_pass.clone());
+    let model_set = pds_for_buffers(pipe_light.clone(), &[model_buffer.clone()], 1).unwrap();
+    sphere.custom_sets = vec![model_set];
 
     // shadow stuff
     // create fullscreen quad to debug cubemap
@@ -159,15 +188,12 @@ fn main() {
     // concatenate all meshes
     // we load them a second time, which i'd like to change at some point
     let meshes: Vec<_> = tobj::load_obj(&relative_path("meshes/sponza/sponza.obj"))
-    // let meshes: Vec<_> = tobj::load_obj(&relative_path("residential/street.obj"))
         .unwrap()
         .0
         .iter()
         .map(|model| convert_mesh(&model.mesh))
         .collect();
     let merged_mesh = merge(&meshes);
-    let model_data: [[f32; 4]; 4] = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
-    let model_buffer = bufferize_data(queue.clone(), model_data);
     let model_set = pds_for_buffers(pipe_caster.clone(), &[model_buffer], 0).unwrap();
     let merged_object = ObjectPrototype {
         vs_path: relative_path("shaders/pretty/shadow_cast_vert.glsl"),
@@ -185,10 +211,6 @@ fn main() {
     let mut all_objects = HashMap::new();
 
     // used in main loop
-    let pipeline = objects[0]
-        .pipeline_spec
-        .concrete(device.clone(), render_pass.clone());
-
     let mut timer_setup = Timer::new("Setup time");
     let mut timer_draw = Timer::new("Overall draw time");
 
@@ -213,27 +235,52 @@ fn main() {
 
         let light_buffer = light.get_buffer(queue.clone());
         // used for color pass
-        let camera_light_set =
-            pds_for_buffers(pipeline.clone(), &[camera_buffer.clone(), light_buffer.clone()], 3).unwrap(); // 0 is the descriptor set idx
-                                                                                                   // used for shadow pass
+        let camera_light_set = pds_for_buffers(
+            pipeline.clone(),
+            &[camera_buffer.clone(), light_buffer.clone()],
+            3,
+        )
+        .unwrap(); // 0 is the descriptor set idx
+                   // used for shadow pass
         let light_set = pds_for_buffers(pipe_caster.clone(), &[light_buffer], 3).unwrap();
         let camera_set = pds_for_buffers(pipe_prepass.clone(), &[camera_buffer], 1).unwrap();
 
-        if window.get_frame_info().keys_down.c {
+        let mut depth_prepass_object = merged_object.clone();
+        depth_prepass_object.custom_sets.push(camera_set.clone());
+        depth_prepass_object.pipeline_spec = pipe_spec_prepass.clone();
+        let mut light_object = sphere.clone();
+        let light_model_matrix = scale(
+            &translate(&Mat4::identity(), &make_vec3(&light.get_position())),
+            &vec3(0.03, 0.03, 0.03),
+        );
+        let light_model_buffer = bufferize_data(queue.clone(), light_model_matrix);
+        let prepass_light_model_set =
+            pds_for_buffers(pipe_prepass.clone(), &[light_model_buffer.clone()], 0).unwrap();
+        light_object.custom_sets = vec![prepass_light_model_set, camera_set.clone()];
+        light_object.pipeline_spec = pipe_spec_prepass.clone();
+        all_objects.insert("depth_prepass", vec![depth_prepass_object, light_object]);
+
+        if window.get_frame_info().keydowns.contains(&VirtualKeyCode::C) {
             view_mode += 1;
 
             match view_mode {
                 0 => {
                     // default: everything enabled
                     system.output_tag = "color";
-                },
+                }
                 1 => {
                     // depth only
                     system.output_tag = "depth_view";
+                }
+                _ => {
+                    view_mode = 0;
+                    system.output_tag = "color";
                 },
-                _ => view_mode = 0,
             }
         }
+
+        let geometry_light_model_set =
+            pds_for_buffers(pipe_light.clone(), &[light_model_buffer.clone()], 1).unwrap();
 
         all_objects.insert(
             "geometry",
@@ -247,6 +294,11 @@ fn main() {
                     obj.custom_sets.push(camera_light_set.clone());
                     obj.clone()
                 })
+                .chain(vec![{
+                    let mut cur_sphere = sphere.clone();
+                    cur_sphere.custom_sets = vec![geometry_light_model_set, camera_set.clone()];
+                    cur_sphere.clone()
+                }])
                 .collect(),
         );
 
@@ -263,10 +315,6 @@ fn main() {
                 .collect(),
         );
 
-        let mut depth_prepass_object = merged_object.clone();
-        depth_prepass_object.custom_sets.push(camera_set);
-        depth_prepass_object.pipeline_spec = pipe_spec_prepass.clone();
-        all_objects.insert("depth_prepass", vec![depth_prepass_object]);
         timer_setup.stop();
 
         // draw
