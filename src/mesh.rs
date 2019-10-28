@@ -252,7 +252,7 @@ pub fn load_obj(queue: Queue, render_pass: RenderPass, path: &Path, vs_path: Pat
                     pds_for_buffers(
                         pipeline.clone(),
                         &[material_buffer, model_buffer.clone()],
-                        1,
+                        textures_set_idx - 1,
                     )
                     .unwrap(),
                     texture_set,

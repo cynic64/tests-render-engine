@@ -105,6 +105,8 @@ fn main() {
 
     // initialize camera
     let mut camera = FlyCamera::default();
+    camera.yaw = 0.0;
+    camera.position = vec3(0.0, 10.0, 0.0);
 
     // light
     let light = MovingLight::new();
@@ -193,6 +195,8 @@ fn main() {
     all_objects.insert("depth_viewer", vec![quad_display]);
     all_objects.insert("shadow_blur", vec![quad_blur]);
 
+    let mut view_mode = 0;
+
     while !window.update() {
         timer_setup.start();
 
@@ -215,11 +219,21 @@ fn main() {
         let light_set = pds_for_buffers(pipe_caster.clone(), &[light_buffer], 3).unwrap();
         let camera_set = pds_for_buffers(pipe_prepass.clone(), &[camera_buffer], 1).unwrap();
 
-        system.output_tag = if window.get_frame_info().keys_down.c {
-            "depth_view"
-        } else {
-            "color"
-        };
+        if window.get_frame_info().keys_down.c {
+            view_mode += 1;
+
+            match view_mode {
+                0 => {
+                    // default: everything enabled
+                    system.output_tag = "color";
+                },
+                1 => {
+                    // depth only
+                    system.output_tag = "depth_view";
+                },
+                _ => view_mode = 0,
+            }
+        }
 
         all_objects.insert(
             "geometry",

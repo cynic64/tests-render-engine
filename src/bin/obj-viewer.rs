@@ -64,6 +64,7 @@ fn main() {
         path,
         relative_path("shaders/obj-viewer/vert.glsl"),
         relative_path("shaders/obj-viewer/frag.glsl"),
+        1,
     );
     println!("Objects Loaded: {}", objects.len());
     let mut all_objects = HashMap::new();
