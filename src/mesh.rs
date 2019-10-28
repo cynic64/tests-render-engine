@@ -134,7 +134,7 @@ fn tangent_bitangent_for_face(face: &[PosTexNorm; 3]) -> (Vec3, Vec3) {
     (tangent, bitangent)
 }
 
-pub fn load_obj(queue: Queue, render_pass: RenderPass, path: &Path, vs_path: PathBuf, fs_path: PathBuf) -> Vec<RenderableObject> {
+pub fn load_obj(queue: Queue, render_pass: RenderPass, path: &Path, vs_path: PathBuf, fs_path: PathBuf, textures_set_idx: usize) -> Vec<RenderableObject> {
     // loads every object in an OBJ file
     // each object has the following descriptors in custom_sets:
     //     - set 0, binding 0: basic material properties (ambient, diffuse, etc.)
@@ -205,7 +205,7 @@ pub fn load_obj(queue: Queue, render_pass: RenderPass, path: &Path, vs_path: Pat
                 sampler.clone(),
                 pipeline.clone(),
                 &[diff_tex, spec_tex, norm_tex],
-                2,
+                textures_set_idx,
             )
                 .unwrap();
 

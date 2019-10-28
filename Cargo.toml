@@ -16,6 +16,7 @@ winit = "0.19"
 rand = "0.7.2"
 tobj = "0.1.11"
 image = "0.22.3"
+objc = "=0.2.6"
 
 [profile.release]
 debug = true

@@ -20,13 +20,13 @@ use nalgebra_glm::*;
 use tests_render_engine::mesh::{convert_mesh, fullscreen_quad, load_obj, merge, Vertex3D};
 use tests_render_engine::{relative_path, FlyCamera};
 
-/*
-const SHADOW_MAP_DIMS: [u32; 2] = [12_288, 2048];
-const PATCH_DIMS: [f32; 2] = [2048.0, 2048.0];
-*/
+const SHADOW_MAP_DIMS: [u32; 2] = [6_144, 1024];
+const PATCH_DIMS: [f32; 2] = [1024.0, 1024.0];
 
+/*
 const SHADOW_MAP_DIMS: [u32; 2] = [3_072, 512];
 const PATCH_DIMS: [f32; 2] = [512.0, 512.0];
+*/
 
 fn main() {
     // initialize window
@@ -43,7 +43,7 @@ fn main() {
     let shadow_blur: Image = vulkano::image::AttachmentImage::sampled(
         device.clone(),
         // SHADOW_MAP_DIMS,
-        [SHADOW_MAP_DIMS[0] * 2, SHADOW_MAP_DIMS[1] * 2],
+        SHADOW_MAP_DIMS,
         Format::D32Sfloat,
     )
     .unwrap();
@@ -114,8 +114,10 @@ fn main() {
         queue.clone(),
         render_pass.clone(),
         &relative_path("meshes/sponza/sponza.obj"),
+        // &relative_path("residential/street.obj"),
         relative_path("shaders/pretty/vert.glsl"),
         relative_path("shaders/pretty/all_frag.glsl"),
+        2  // textures set idx
     );
     println!("Objects Loaded: {}", objects.len());
 
@@ -155,6 +157,7 @@ fn main() {
     // concatenate all meshes
     // we load them a second time, which i'd like to change at some point
     let meshes: Vec<_> = tobj::load_obj(&relative_path("meshes/sponza/sponza.obj"))
+    // let meshes: Vec<_> = tobj::load_obj(&relative_path("residential/street.obj"))
         .unwrap()
         .0
         .iter()
