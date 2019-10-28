@@ -323,6 +323,41 @@ fn main() {
                     });
                     system.output_tag = "color";
                 },
+                9 => {
+                    // diffuse + spec + normal mapping + shadows
+                    objects.iter_mut().for_each(|obj| {
+                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/shadows_and_color.glsl");
+                    });
+                    system.output_tag = "color";
+                },
+                10 => {
+                    // diffuse + spec + normal mapping + shadows + tonemapping
+                    objects.iter_mut().for_each(|obj| {
+                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/all_frag.glsl");
+                    });
+                    system.output_tag = "color";
+                },
+                11 => {
+                    // specular only
+                    objects.iter_mut().for_each(|obj| {
+                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/specular_only.glsl");
+                    });
+                    system.output_tag = "color";
+                },
+                12 => {
+                    // specular only, low shininess
+                    objects.iter_mut().for_each(|obj| {
+                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/specular_only_2.glsl");
+                    });
+                    system.output_tag = "color";
+                },
+                13 => {
+                    // normals
+                    objects.iter_mut().for_each(|obj| {
+                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/normals_only.glsl");
+                    });
+                    system.output_tag = "color";
+                },
                 _ => {
                     objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path = relative_path("shaders/pretty/all_frag.glsl");
