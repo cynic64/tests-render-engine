@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use nalgebra_glm::*;
 
 use tests_render_engine::mesh::{
-    convert_mesh, fullscreen_quad, load_obj, load_obj_single, merge, Vertex3D,
+    convert_mesh, fullscreen_quad, load_obj, load_obj_single, merge, Pos,
 };
 use tests_render_engine::{relative_path, FlyCamera};
 
@@ -140,7 +140,7 @@ fn main() {
         fill_type: PrimitiveTopology::TriangleList,
         read_depth: true,
         write_depth: true,
-        // merge converts to Vertex3D which is what we want
+        // merge converts to Pos which is what we want
         mesh: merge(&[sphere_mesh]),
         custom_sets: vec![],
         custom_dynamic_state: None,
@@ -174,7 +174,7 @@ fn main() {
         fill_type: PrimitiveTopology::TriangleList,
         read_depth: true,
         write_depth: true,
-        vtype: VertexType::<Vertex3D>::new(),
+        vtype: VertexType::<Pos>::new(),
     };
     let pipe_caster = pipe_spec_caster.concrete(device.clone(), rpass_shadow.clone());
 

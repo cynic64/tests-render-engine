@@ -354,7 +354,7 @@ struct Material {
     use_texture: [f32; 4],
 }
 
-pub fn merge(meshes: &[Mesh<PosTexNorm>]) -> Mesh<Vertex3D> {
+pub fn merge(meshes: &[Mesh<PosTexNorm>]) -> Mesh<Pos> {
     // merges a list of meshes into a single mesh with only position data
 
     // you could probably write this as an iterator, i'm just too lazy
@@ -366,7 +366,7 @@ pub fn merge(meshes: &[Mesh<PosTexNorm>]) -> Mesh<Vertex3D> {
     for mesh in meshes.iter() {
         for vertex in mesh.vertices.iter() {
             // only copy position data
-            vertices.push(Vertex3D {
+            vertices.push(Pos {
                 position: vertex.position
             });
         }
@@ -421,11 +421,11 @@ pub struct Vertex2D {
 vulkano::impl_vertex!(Vertex2D, position);
 
 #[derive(Default, Debug, Clone, Copy)]
-pub struct Vertex3D {
+pub struct Pos {
     pub position: [f32; 3],
 }
 
-vulkano::impl_vertex!(Vertex3D, position);
+vulkano::impl_vertex!(Pos, position);
 
 #[derive(Default, Debug, Clone, Copy)]
 pub struct PosTexNorm {
