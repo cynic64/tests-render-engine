@@ -237,6 +237,7 @@ fn main() {
     let mut view_mode: i32 = 0;
     let mut update_view = false;
     let mut draw_wireframe = false;
+    let mut cursor_grabbed = true;
 
     while !window.update() {
         timer_setup.start();
@@ -248,10 +249,13 @@ fn main() {
             merged_object.clone(),
             light.get_position(),
         );
-        // update camera and light
-        camera.update(window.get_frame_info());
+        // update camera, but only if we're grabbing the cursor
+        if cursor_grabbed {
+            camera.update(window.get_frame_info());
+        }
         let camera_buffer = camera.get_buffer(queue.clone());
 
+        // update light
         let light_buffer = light.get_buffer(queue.clone());
         // used for color pass
         let camera_light_set = pds_for_buffers(
@@ -400,6 +404,7 @@ fn main() {
                 }
             }
         }
+
         if window
             .get_frame_info()
             .keydowns
@@ -407,6 +412,21 @@ fn main() {
         {
             view_mode -= 2;
             update_view = true;
+        }
+
+        if window
+            .get_frame_info()
+            .keydowns
+            .contains(&VirtualKeyCode::Escape)
+        {
+            cursor_grabbed = !cursor_grabbed;
+            if cursor_grabbed {
+                window.get_surface().window().hide_cursor(true);
+                window.set_recenter(true);
+            } else {
+                window.get_surface().window().hide_cursor(false);
+                window.set_recenter(false);
+            }
         }
 
         let geometry_light_model_set =
