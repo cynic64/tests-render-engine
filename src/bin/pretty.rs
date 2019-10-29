@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use nalgebra_glm::*;
 
 use tests_render_engine::mesh::{
-    convert_mesh, fullscreen_quad, load_obj, load_obj_single, merge, Pos,
+    convert_mesh, fullscreen_quad, load_obj, load_obj_single, merge, wireframe, Pos,
 };
 use tests_render_engine::{relative_path, FlyCamera};
 
@@ -201,9 +201,26 @@ fn main() {
         fill_type: PrimitiveTopology::TriangleList,
         read_depth: true,
         write_depth: true,
-        mesh: merged_mesh,
+        mesh: merged_mesh.clone(),
         // copy the model matrix from the first object that we loaded earlier
-        custom_sets: vec![model_set],
+        custom_sets: vec![model_set.clone()],
+        custom_dynamic_state: None,
+    }
+    .into_renderable_object(queue.clone());
+
+    // create wireframe mesh
+    let wireframe_mesh = wireframe(&merged_mesh);
+    let wireframe_object = ObjectPrototype {
+        // the light vertex shader does exactly the same we need to do, just
+        // converts the position to screen space and nothing else, so we re-use
+        // it
+        vs_path: relative_path("shaders/pretty/light_vert.glsl"),
+        fs_path: relative_path("shaders/pretty/wireframe_frag.glsl"),
+        fill_type: PrimitiveTopology::LineList,
+        read_depth: true,
+        write_depth: true,
+        mesh: wireframe_mesh,
+        custom_sets: vec![model_set.clone()],
         custom_dynamic_state: None,
     }
     .into_renderable_object(queue.clone());
@@ -219,6 +236,7 @@ fn main() {
 
     let mut view_mode: i32 = 0;
     let mut update_view = false;
+    let mut draw_wireframe = false;
 
     while !window.update() {
         timer_setup.start();
@@ -261,7 +279,12 @@ fn main() {
         light_object.pipeline_spec = pipe_spec_prepass.clone();
         all_objects.insert("depth_prepass", vec![depth_prepass_object, light_object]);
 
-        if window.get_frame_info().keydowns.contains(&VirtualKeyCode::C) || update_view {
+        if window
+            .get_frame_info()
+            .keydowns
+            .contains(&VirtualKeyCode::C)
+            || update_view
+        {
             view_mode += 1;
             update_view = false;
 
@@ -269,105 +292,119 @@ fn main() {
                 0 => {
                     // default: everything enabled
                     system.output_tag = "color";
-                },
+                }
                 1 => {
                     // pure white
                     objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path = relative_path("shaders/pretty/white_frag.glsl");
                     });
                     system.output_tag = "color";
-                },
+                }
                 2 => {
                     // depth only
                     system.output_tag = "depth_view";
-                },
+                }
                 3 => {
                     // diffuse_only
                     objects.iter_mut().for_each(|obj| {
-                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/diffuse_only_frag.glsl");
+                        obj.pipeline_spec.fs_path =
+                            relative_path("shaders/pretty/diffuse_only_frag.glsl");
                     });
                     system.output_tag = "color";
-                },
+                }
                 4 => {
                     // diffuse and light direction
                     objects.iter_mut().for_each(|obj| {
-                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/diffuse_and_light_frag.glsl");
+                        obj.pipeline_spec.fs_path =
+                            relative_path("shaders/pretty/diffuse_and_light_frag.glsl");
                     });
                     system.output_tag = "color";
-                },
+                }
                 5 => {
                     // diffuse and light distance + direction
                     objects.iter_mut().for_each(|obj| {
-                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/diffuse_light_distance_frag.glsl");
+                        obj.pipeline_spec.fs_path =
+                            relative_path("shaders/pretty/diffuse_light_distance_frag.glsl");
                     });
                     system.output_tag = "color";
-                },
+                }
                 6 => {
                     // diffuse and specular
                     objects.iter_mut().for_each(|obj| {
-                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/diffuse_and_spec.glsl");
+                        obj.pipeline_spec.fs_path =
+                            relative_path("shaders/pretty/diffuse_and_spec.glsl");
                     });
                     system.output_tag = "color";
-                },
+                }
                 7 => {
                     // diffuse, specular, normal mapping
                     objects.iter_mut().for_each(|obj| {
-                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/diffuse_spec_normal.glsl");
+                        obj.pipeline_spec.fs_path =
+                            relative_path("shaders/pretty/diffuse_spec_normal.glsl");
                     });
                     system.output_tag = "color";
-                },
+                }
                 8 => {
                     // shadows only
                     objects.iter_mut().for_each(|obj| {
-                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/shadows_only.glsl");
+                        obj.pipeline_spec.fs_path =
+                            relative_path("shaders/pretty/shadows_only.glsl");
                     });
                     system.output_tag = "color";
-                },
+                }
                 9 => {
                     // diffuse + spec + normal mapping + shadows
                     objects.iter_mut().for_each(|obj| {
-                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/shadows_and_color.glsl");
+                        obj.pipeline_spec.fs_path =
+                            relative_path("shaders/pretty/shadows_and_color.glsl");
                     });
                     system.output_tag = "color";
-                },
+                }
                 10 => {
                     // diffuse + spec + normal mapping + shadows + tonemapping
                     objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path = relative_path("shaders/pretty/all_frag.glsl");
                     });
                     system.output_tag = "color";
-                },
+                }
                 11 => {
                     // specular only
                     objects.iter_mut().for_each(|obj| {
-                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/specular_only.glsl");
+                        obj.pipeline_spec.fs_path =
+                            relative_path("shaders/pretty/specular_only.glsl");
                     });
                     system.output_tag = "color";
-                },
+                }
                 12 => {
                     // specular only, low shininess
                     objects.iter_mut().for_each(|obj| {
-                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/specular_only_2.glsl");
+                        obj.pipeline_spec.fs_path =
+                            relative_path("shaders/pretty/specular_only_2.glsl");
                     });
                     system.output_tag = "color";
-                },
+                }
                 13 => {
                     // normals
                     objects.iter_mut().for_each(|obj| {
-                        obj.pipeline_spec.fs_path = relative_path("shaders/pretty/normals_only.glsl");
+                        obj.pipeline_spec.fs_path =
+                            relative_path("shaders/pretty/normals_only.glsl");
                     });
                     system.output_tag = "color";
-                },
+                }
                 _ => {
                     objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path = relative_path("shaders/pretty/all_frag.glsl");
                     });
                     view_mode = 0;
                     system.output_tag = "color";
-                },
+                }
             }
         }
-        if window.get_frame_info().keydowns.contains(&VirtualKeyCode::V) {
+        if window
+            .get_frame_info()
+            .keydowns
+            .contains(&VirtualKeyCode::V)
+        {
             view_mode -= 2;
             update_view = true;
         }
@@ -375,25 +412,34 @@ fn main() {
         let geometry_light_model_set =
             pds_for_buffers(pipe_light.clone(), &[light_model_buffer.clone()], 1).unwrap();
 
-        all_objects.insert(
-            "geometry",
+        let mut geometry_object_list: Vec<_> =
             objects
-                .clone()
-                .iter_mut()
-                .map(|obj| {
-                    obj.pipeline_spec.write_depth = false;
-                    obj.pipeline_spec.read_depth = true;
-                    // add camera set to each object before adding it to the scene
-                    obj.custom_sets.push(camera_light_set.clone());
-                    obj.clone()
-                })
-                .chain(vec![{
-                    let mut cur_sphere = sphere.clone();
-                    cur_sphere.custom_sets = vec![geometry_light_model_set, camera_set.clone()];
-                    cur_sphere.clone()
-                }])
-                .collect(),
-        );
+            .clone()
+            .iter_mut()
+            .map(|obj| {
+                obj.pipeline_spec.write_depth = false;
+                obj.pipeline_spec.read_depth = true;
+                // add camera set to each object before adding it to the scene
+                obj.custom_sets.push(camera_light_set.clone());
+                obj.clone()
+            })
+            .collect();
+
+        let mut cur_sphere = sphere.clone();
+        cur_sphere.custom_sets = vec![geometry_light_model_set, camera_set.clone()];
+        geometry_object_list.push(cur_sphere);
+
+        if draw_wireframe {
+            let mut cur_wireframe_object = wireframe_object.clone();
+            cur_wireframe_object.custom_sets.push(camera_set.clone());
+            geometry_object_list.push(cur_wireframe_object.clone());
+        }
+
+        if window.get_frame_info().keydowns.contains(&VirtualKeyCode::R) {
+            draw_wireframe = !draw_wireframe;
+        }
+
+        all_objects.insert("geometry", geometry_object_list);
 
         all_objects.insert(
             "shadow",
@@ -407,6 +453,9 @@ fn main() {
                 })
                 .collect(),
         );
+
+        let mut cur_wireframe_object = wireframe_object.clone();
+        cur_wireframe_object.custom_sets.push(camera_set.clone());
 
         timer_setup.stop();
 

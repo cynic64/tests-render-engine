@@ -56,6 +56,37 @@ pub fn load_obj_single(path: &Path) -> Mesh<PosTexNorm> {
     }
 }
 
+pub fn wireframe(mesh: &Mesh<Pos>) -> Mesh<Pos> {
+    // converts a mesh of triangles into one with lines for every edge, suitable
+    // for drawing a wireframe version of a mesh
+
+    let mut vertices = vec![];
+    let mut indices = vec![];
+
+    for i in 0 .. mesh.indices.len() / 3 {
+        let v1 = mesh.vertices[mesh.indices[3 * i] as usize];
+        let v2 = mesh.vertices[mesh.indices[3 * i + 1] as usize];
+        let v3 = mesh.vertices[mesh.indices[3 * i + 2] as usize];
+        vertices.push(v1);
+        vertices.push(v2);
+        vertices.push(v3);
+        // line 1, between v1 and v2
+        indices.push(3 * i as u32);
+        indices.push(3 * i as u32 + 1);
+        // line 2, between v2 and v3
+        indices.push(3 * i as u32 + 1);
+        indices.push(3 * i as u32 + 2);
+        // line 3, between v3 and v1
+        indices.push(3 * i as u32 + 2);
+        indices.push(3 * i as u32);
+    }
+
+    Mesh {
+        vertices,
+        indices,
+    }
+}
+
 pub fn add_tangents(mesh: &Mesh<PosTexNorm>) -> Mesh<PosTexNormTan> {
     // use to compute tangents for a mesh with normals and texture coordinates
     let (vertices, indices) = (&mesh.vertices, &mesh.indices);
