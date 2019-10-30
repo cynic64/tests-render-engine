@@ -1184,7 +1184,7 @@ dependencies = [
  "image 0.21.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "nalgebra-glm 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "re-ll 0.1.0",
- "shade_runner 0.1.2",
+ "shade_runner 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "time 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
  "vulkano 0.14.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "vulkano-shaders 0.14.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1277,7 +1277,8 @@ dependencies = [
 
 [[package]]
 name = "shade_runner"
-version = "0.1.2"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "notify 4.0.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "shaderc 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1819,6 +1820,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum semver-parser 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 "checksum serde 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)" = "9796c9b7ba2ffe7a9ce53c2287dfc48080f4b2b362fcc245a259b3a7201119dd"
 "checksum serde_derive 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)" = "4b133a43a1ecd55d4086bd5b4dc6c1751c68b1bfbeba7a5040442022c7e7c02e"
+"checksum shade_runner 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "964cd4893c2ab83e861e87b4e3d4255a6fc769e7f03627b89a0f1322f05f7fa2"
 "checksum shaderc 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)" = "6a4abc3402ee1b3054a847ad1efd2c7d2721c64caf1c03bed94c461d7a1635b4"
 "checksum shaderc-sys 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)" = "96874aafeb936b4c9b0c4fa1c79b1abdeac9289700efc5a313c3f65c95fa3f62"
 "checksum shared_library 0.1.9 (registry+https://github.com/rust-lang/crates.io-index)" = "5a9e7e0f2bfae24d8a5b5a66c5b257a83c7412304311512a0c054cd5e619da11"
