@@ -7,7 +7,7 @@ Why do I have to manage queue and device? :(
 
 use re::collection_cache::pds_for_buffers;
 use re::input::get_elapsed;
-use re::mesh::{Mesh, PrimitiveTopology, ObjectPrototype};
+use re::mesh::{Mesh, ObjectPrototype, PrimitiveTopology};
 use re::render_passes;
 use re::system::{Pass, System};
 use re::utils::{bufferize_data, load_texture};
@@ -21,7 +21,9 @@ use nalgebra_glm::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tests_render_engine::mesh::{add_tangents, load_obj_single, PosTexNormTan};
+use tests_render_engine::mesh::{
+    add_tangents, convert_meshes, load_obj, merge, only_pos_from_ptnt, wireframe, VPosTexNormTan,
+};
 use tests_render_engine::{default_sampler, relative_path, OrbitCamera};
 
 fn main() {
@@ -63,7 +65,9 @@ fn main() {
     let mut camera = OrbitCamera::default();
 
     // load meshes and create objects
-    let basic_mesh = load_obj_single(&relative_path("meshes/raptor.obj"));
+    let (mut models, _materials) =
+        load_obj(&relative_path("meshes/raptor.obj")).expect("Couldn't load OBJ file");
+    let basic_mesh = convert_meshes(&[models.remove(0)]).remove(0);
     let raptor_mesh = add_tangents(&basic_mesh);
     let normals_mesh = normals_vis(&raptor_mesh);
 
@@ -153,8 +157,7 @@ fn main() {
             raptor.pipeline_spec.fs_path =
                 relative_path("shaders/normal-mapping/object_frag_debug.glsl");
         } else {
-            raptor.pipeline_spec.fs_path =
-                relative_path("shaders/normal-mapping/object_frag.glsl");
+            raptor.pipeline_spec.fs_path = relative_path("shaders/normal-mapping/object_frag.glsl");
         }
 
         let objects = if window.get_frame_info().keys_down.c {
@@ -172,40 +175,24 @@ fn main() {
     system.print_stats();
 }
 
-fn normals_vis(mesh: &Mesh<PosTexNormTan>) -> Mesh<PosColor> {
-    let (vertices, indices) = (&mesh.vertices, &mesh.indices);
+fn normals_vis(mesh: &Mesh<VPosTexNormTan>) -> Mesh<VPosColor> {
+    // produces a mesh of type VPos, we need VPosColor
+    let wireframe_pos_only = wireframe(&only_pos_from_ptnt(&mesh));
+    let wireframe_verts: Vec<VPosColor> = wireframe_pos_only
+        .vertices
+        .iter()
+        .map(|vertex| VPosColor {
+            position: vertex.position,
+            color: [0.0, 0.0, 0.0],
+        })
+        .collect();
+    let wireframe_mesh = Mesh {
+        vertices: wireframe_verts,
+        indices: wireframe_pos_only.indices,
+    };
 
-    let faces = faces_from(&vertices, &indices);
-    let wireframe = faces.iter().flat_map(|f| {
-        vec![
-            PosColor {
-                position: f[0].position,
-                color: [0.5, 0.5, 0.5],
-            },
-            PosColor {
-                position: f[1].position,
-                color: [0.5, 0.5, 0.5],
-            },
-            PosColor {
-                position: f[1].position,
-                color: [0.5, 0.5, 0.5],
-            },
-            PosColor {
-                position: f[2].position,
-                color: [0.5, 0.5, 0.5],
-            },
-            PosColor {
-                position: f[2].position,
-                color: [0.5, 0.5, 0.5],
-            },
-            PosColor {
-                position: f[0].position,
-                color: [0.5, 0.5, 0.5],
-            },
-        ]
-    });
-
-    let vertices: Vec<PosColor> = vertices
+    let vertices: Vec<VPosColor> = mesh
+        .vertices
         .iter()
         .flat_map(|v| {
             let normal = make_vec3(&v.normal);
@@ -214,54 +201,42 @@ fn normals_vis(mesh: &Mesh<PosTexNormTan>) -> Mesh<PosColor> {
             let position = make_vec3(&v.position);
 
             vec![
-                PosColor {
+                // line to show normal, colored red
+                VPosColor {
                     position: v.position,
                     color: [1.0, 0.0, 0.0],
                 },
-                PosColor {
+                VPosColor {
                     position: (position + normal * 0.2).into(),
                     color: [1.0, 0.0, 0.0],
                 },
-                PosColor {
+                // line to show normal, colored red
+                VPosColor {
                     position: v.position,
                     color: [0.0, 1.0, 0.0],
                 },
-                PosColor {
+                VPosColor {
                     position: (position + tangent * 0.2).into(),
                     color: [0.0, 1.0, 0.0],
                 },
-                PosColor {
+                // line to show bitangent, colored blue
+                VPosColor {
                     position: v.position,
                     color: [0.0, 0.0, 1.0],
                 },
-                PosColor {
+                VPosColor {
                     position: (position + bitangent * 0.2).into(),
                     color: [0.0, 0.0, 1.0],
                 },
             ]
         })
-        .chain(wireframe)
         .collect();
 
     let indices: Vec<u32> = (0..vertices.len()).map(|x| x as u32).collect();
+    let normals_mesh = Mesh { vertices, indices };
 
-    Mesh { vertices, indices }
+    merge(&[wireframe_mesh, normals_mesh])
 }
-
-fn faces_from(vertices: &[PosTexNormTan], indices: &[u32]) -> Vec<Face> {
-    let mut faces = vec![];
-    for i in 0..indices.len() / 3 {
-        faces.push([
-            vertices[indices[i * 3] as usize],
-            vertices[indices[i * 3 + 1] as usize],
-            vertices[indices[i * 3 + 2] as usize],
-        ])
-    }
-
-    faces
-}
-
-type Face = [PosTexNormTan; 3];
 
 #[derive(Clone)]
 struct Light {
@@ -269,8 +244,8 @@ struct Light {
 }
 
 #[derive(Default, Debug, Clone, Copy)]
-struct PosColor {
+struct VPosColor {
     position: [f32; 3],
     color: [f32; 3],
 }
-vulkano::impl_vertex!(PosColor, position, color);
+vulkano::impl_vertex!(VPosColor, position, color);

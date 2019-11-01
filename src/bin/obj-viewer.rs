@@ -1,19 +1,23 @@
-use render_engine as re;
-
-use re::{Queue, Buffer};
-use re::collection_cache::pds_for_buffers;
-use re::render_passes;
-use re::system::{Pass, System};
-use re::utils::bufferize_data;
-use re::window::Window;
-use re::input::get_elapsed;
+use render_engine::collection_cache::pds_for_buffers;
+use render_engine::input::get_elapsed;
+use render_engine::mesh::{PrimitiveTopology, VertexType, ObjectPrototype};
+use render_engine::pipeline_cache::PipelineSpec;
+use render_engine::render_passes;
+use render_engine::system::{Pass, System, RenderableObject};
+use render_engine::utils::bufferize_data;
+use render_engine::window::Window;
+use render_engine::{Buffer, Queue};
 
 use std::collections::HashMap;
 use std::env;
 use std::path::Path;
 
-use tests_render_engine::{FlyCamera, relative_path};
-use tests_render_engine::mesh::load_obj;
+use nalgebra_glm::{Mat4, vec3, scale};
+
+use tests_render_engine::mesh::{
+    add_tangents_multi, convert_meshes, load_obj, load_textures, VPosTexNormTan,
+};
+use tests_render_engine::{relative_path, FlyCamera};
 
 fn main() {
     // get path to load_obj
@@ -57,36 +61,92 @@ fn main() {
     // light
     let light = MovingLight::new();
 
-    // load objects
-    let objects = load_obj(
-        queue.clone(),
-        render_pass.clone(),
-        path,
-        relative_path("shaders/obj-viewer/vert.glsl"),
-        relative_path("shaders/obj-viewer/frag.glsl"),
-        1,
-    );
+    // create a pipeline identical to the one that will be used to draw all
+    // objects. needed to create sets for the textures
+    let pipeline_spec = PipelineSpec {
+        vs_path: relative_path("shaders/obj-viewer/vert.glsl"),
+        fs_path: relative_path("shaders/obj-viewer/frag.glsl"),
+        fill_type: PrimitiveTopology::TriangleList,
+        read_depth: true,
+        write_depth: true,
+        vtype: VertexType::<VPosTexNormTan>::new(),
+    };
+    let pipeline = pipeline_spec.concrete(device.clone(), render_pass.clone());
+
+    // load meshes and materials
+    let (models, materials) = load_obj(&path).expect("Couldn't open OBJ file");
+    let meshes = add_tangents_multi(&convert_meshes(&models));
+    let textures_path = path.parent().expect("Given path has no parent!");
+    println!("Searching for textures in {:?}", textures_path);
+    let texture_sets = load_textures(queue.clone(), pipeline.clone(), textures_path, &materials, 1);
+
+    // create a default Material (todo: get rid of this)
+    let material = Material {
+        ambient: [1.0, 1.0, 1.0, 0.0],
+        diffuse: [1.0, 1.0, 1.0, 0.0],
+        specular: [1.0, 1.0, 1.0, 0.0],
+        shininess: [32.0, 0.0, 0.0, 0.0],
+        use_texture: [1.0, 0.0, 0.0, 0.0],
+    };
+    let material_buffer = bufferize_data(queue.clone(), material);
+    let model: [[f32; 4]; 4] = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
+    let model_buffer = bufferize_data(queue.clone(), model);
+    let material_model_set = pds_for_buffers(pipeline.clone(), &[material_buffer, model_buffer], 0).unwrap();
+
+    // combine the meshes and textures to create a list of renderable objects
+    let objects: Vec<RenderableObject> = meshes
+        .into_iter()
+        .enumerate()
+        .map(|(idx, mesh)| {
+            let model = &models[idx];
+
+            let mat_idx = if let Some(idx) = model.mesh.material_id {
+                idx
+            } else {
+                println!("Model {} has no material id! Using 0.", model.name);
+                0
+            };
+            let texture_set = texture_sets[mat_idx].clone();
+
+            ObjectPrototype {
+                vs_path: relative_path("shaders/obj-viewer/vert.glsl"),
+                fs_path: relative_path("shaders/obj-viewer/frag.glsl"),
+                fill_type: PrimitiveTopology::TriangleList,
+                read_depth: true,
+                write_depth: true,
+                mesh,
+                custom_sets: vec![material_model_set.clone(), texture_set],
+                custom_dynamic_state: None,
+            }
+            .into_renderable_object(queue.clone())
+        })
+        .collect();
+
     println!("Objects Loaded: {}", objects.len());
     let mut all_objects = HashMap::new();
 
     // used in main loop
-    let pipeline = objects[0]
-        .pipeline_spec
-        .concrete(device.clone(), render_pass.clone());
-
     while !window.update() {
         // update camera and light
         camera.update(window.get_frame_info());
         let camera_buffer = camera.get_buffer(queue.clone());
 
         let light_buffer = light.get_buffer(queue.clone());
-        let camera_light_set = pds_for_buffers(pipeline.clone(), &[camera_buffer, light_buffer], 2).unwrap(); // 0 is the descriptor set idx
+        let camera_light_set =
+            pds_for_buffers(pipeline.clone(), &[camera_buffer, light_buffer], 2).unwrap(); // 0 is the descriptor set idx
 
-        all_objects.insert("geometry", objects.clone().iter_mut().map(|obj| {
-            // add camera set to each object before adding it to the scene
-            obj.custom_sets.push(camera_light_set.clone());
-            obj.clone()
-        }).collect());
+        all_objects.insert(
+            "geometry",
+            objects
+                .clone()
+                .iter_mut()
+                .map(|obj| {
+                    // add camera set to each object before adding it to the scene
+                    obj.custom_sets.push(camera_light_set.clone());
+                    obj.clone()
+                })
+                .collect(),
+        );
 
         // draw
         system.render_to_window(&mut window, all_objects.clone());
@@ -121,4 +181,13 @@ impl MovingLight {
 
         bufferize_data(queue.clone(), data)
     }
+}
+
+#[allow(dead_code)]
+struct Material {
+    ambient: [f32; 4],
+    diffuse: [f32; 4],
+    specular: [f32; 4],
+    shininess: [f32; 4],
+    use_texture: [f32; 4],
 }

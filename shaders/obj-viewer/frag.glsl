@@ -8,11 +8,11 @@ layout(location = 3) in vec3 tan_frag_pos;
 layout(location = 0) out vec4 f_color;
 
 layout(set = 0, binding = 0) uniform Material {
-  vec3 ambient;
-  vec3 diffuse;
-  vec3 specular;
-  vec3 shininess;
-  vec3 use_texture;
+  vec4 ambient;
+  vec4 diffuse;
+  vec4 specular;
+  vec4 shininess;
+  vec4 use_texture;
 } material;
 
 layout(set = 0, binding = 1) uniform Model {
@@ -36,7 +36,7 @@ layout(set = 2, binding = 1) uniform Light {
 
 void main() {
   // only use the texture if we should
-  vec4 tex_diffuse = material.use_texture.r > 0.5 ? texture(diffuse_map, v_tex_coord) : vec4(material.diffuse, 1.0);
+  vec4 tex_diffuse = material.use_texture.r > 0.5 ? texture(diffuse_map, v_tex_coord) : vec4(material.diffuse.rgb, 1.0);
 
   if (tex_diffuse.a < 0.5) {
     discard;
@@ -59,7 +59,7 @@ void main() {
   vec3 view_dir = normalize(tan_cam_pos - tan_frag_pos);
   vec3 halfway_dir = normalize(light_dir + view_dir);
   float spec = pow(max(dot(normal, halfway_dir), 0.0), material.shininess.r);
-  vec3 specular = material.specular * spec;
+  vec3 specular = material.specular.rgb * spec;
 
   // result
   vec3 result = ambient + (diffuse + specular) * light.strength.r;

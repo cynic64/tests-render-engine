@@ -2,11 +2,11 @@ use render_engine as re;
 
 use re::collection_cache::pds_for_buffers;
 use re::mesh::{ObjectPrototype, PrimitiveTopology};
+use re::pipeline_cache::PipelineSpec;
 use re::system::{Pass, RenderableObject, System};
 use re::utils::bufferize_data;
 use re::window::Window;
-use re::{render_passes, Format, Image, Queue, Pipeline, Set};
-use re::pipeline_cache::PipelineSpec;
+use re::{render_passes, Format, Image, Pipeline, Queue, Set};
 
 use vulkano::command_buffer::DynamicState;
 use vulkano::pipeline::viewport::Viewport;
@@ -15,7 +15,7 @@ use nalgebra_glm::*;
 
 use std::collections::HashMap;
 
-use tests_render_engine::mesh::{load_obj_single, fullscreen_quad};
+use tests_render_engine::mesh::{convert_meshes, fullscreen_quad, load_obj};
 use tests_render_engine::{relative_path, OrbitCamera};
 
 // patches are laid out in a 6x1
@@ -79,7 +79,9 @@ fn main() {
     let mut camera = OrbitCamera::default();
 
     // load object
-    let mesh = load_obj_single(&relative_path("meshes/shadowtest.obj"));
+    let (mut models, _materials) =
+        load_obj(&relative_path("meshes/shadowtest.obj")).expect("Couldn't load OBJ file");
+    let mesh = convert_meshes(&[models.remove(0)]).remove(0);
 
     let mut base_object = ObjectPrototype {
         vs_path: relative_path("shaders/point-shadow/shadow_cast_vert.glsl"),
@@ -214,11 +216,7 @@ fn convert_to_shadow_casters(
             // all sets for the dragon we're currently creating
             // we take the model set from the base dragon
             // (set 0)
-            let custom_sets = vec![
-                base_object.custom_sets[0].clone(),
-                proj_set.clone(),
-                set,
-            ];
+            let custom_sets = vec![base_object.custom_sets[0].clone(), proj_set.clone(), set];
 
             // dynamic state for the current dragon, represents which part
             // of the patched texture we draw to

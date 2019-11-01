@@ -18,17 +18,13 @@ use std::collections::HashMap;
 use nalgebra_glm::*;
 
 use tests_render_engine::mesh::{
-    convert_mesh, fullscreen_quad, load_obj, load_obj_single, merge, wireframe, Pos,
+    add_tangents_multi, convert_meshes, fullscreen_quad, load_obj, merge, wireframe, VPos,
+    VPosTexNormTan, load_textures, only_pos_from_ptnt, only_pos,
 };
 use tests_render_engine::{relative_path, FlyCamera};
 
 const SHADOW_MAP_DIMS: [u32; 2] = [6_144, 1024];
 const PATCH_DIMS: [f32; 2] = [1024.0, 1024.0];
-
-/*
-const SHADOW_MAP_DIMS: [u32; 2] = [3_072, 512];
-const PATCH_DIMS: [f32; 2] = [512.0, 512.0];
-*/
 
 fn main() {
     // initialize window
@@ -117,31 +113,92 @@ fn main() {
     let model_data: [[f32; 4]; 4] = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
     let model_buffer = bufferize_data(queue.clone(), model_data);
 
-    // load objects
-    let mut objects = load_obj(
+    // a default material, at some point I want to get rid of Material
+    // altogether and just use textures
+    let material_data = Material {
+        ambient: [1.0, 1.0, 1.0, 1.0],
+        diffuse: [1.0, 1.0, 1.0, 1.0],
+        specular: [1.0, 1.0, 1.0, 1.0],
+        shininess: [32.0, 0.0, 0.0, 0.0],
+        use_texture: [1.0, 1.0, 1.0, 1.0],
+    };
+    let material_buffer = bufferize_data(queue.clone(), material_data);
+
+    // create a pipeline matching the one that will be used by the geometry
+    // pass, needed for creating textures and so on.
+    let geo_pipeline = PipelineSpec {
+        vs_path: relative_path("shaders/pretty/vert.glsl"),
+        fs_path: relative_path("shaders/pretty/all_frag.glsl"),
+        fill_type: PrimitiveTopology::TriangleList,
+        read_depth: true,
+        // we use a depth prepass so don't write to the depth buffer
+        write_depth: false,
+        vtype: VertexType::<VPosTexNormTan>::new(),
+    }
+    .concrete(device.clone(), render_pass.clone());
+
+    // set including model and material, used in geometry pass
+    let mat_model_set = pds_for_buffers(geo_pipeline.clone(), &[material_buffer, model_buffer.clone()], 1).unwrap();
+
+    // load obj
+    let (models, materials) =
+        load_obj(&relative_path("meshes/sponza/sponza.obj")).expect("Couldn't load OBJ file");
+
+    // convert to meshes and load textures
+    let meshes = add_tangents_multi(&convert_meshes(&models));
+    let texture_sets = load_textures(
         queue.clone(),
-        render_pass.clone(),
-        &relative_path("meshes/sponza/sponza.obj"),
-        relative_path("shaders/pretty/vert.glsl"),
-        relative_path("shaders/pretty/all_frag.glsl"),
-        2, // textures set idx
+        geo_pipeline.clone(),
+        &relative_path("meshes/sponza/"),
+        &materials,
+        // descriptor set idx textures will be bound to. it's set to 2 in the
+        // fragment shader, so this has to be 2 as well.
+        2,
     );
+
+    // create renderable objects for geometry pass
+    let mut objects: Vec<RenderableObject> = meshes
+        .iter()
+        .enumerate()
+        .map(|(idx, mesh)| {
+            let model = &models[idx];
+
+            let mat_idx = if let Some(idx) = model.mesh.material_id {
+                idx
+            } else {
+                println!("Model {} has no material id! Using 0.", model.name);
+                0
+            };
+            let texture_set = texture_sets[mat_idx].clone();
+
+            ObjectPrototype {
+                vs_path: relative_path("shaders/pretty/vert.glsl"),
+                fs_path: relative_path("shaders/pretty/all_frag.glsl"),
+                fill_type: PrimitiveTopology::TriangleList,
+                read_depth: true,
+                write_depth: true,
+                mesh: mesh.clone(),
+                custom_sets: vec![mat_model_set.clone(), texture_set],
+                custom_dynamic_state: None,
+            }
+            .into_renderable_object(queue.clone())
+        })
+        .collect();
+
     println!("Objects Loaded: {}", objects.len());
 
-    let pipeline = objects[0]
-        .pipeline_spec
-        .concrete(device.clone(), render_pass.clone());
-
     // load sphere to show light's position
-    let sphere_mesh = load_obj_single(&relative_path("meshes/sphere.obj"));
+    let sphere_mesh = {
+        let (models, _materials) = load_obj(&relative_path("meshes/sphere.obj")).expect("Couldn't load OBJ file");
+        convert_meshes(&[models[0].clone()]).remove(0)
+    };
     let mut sphere = ObjectPrototype {
         vs_path: relative_path("shaders/pretty/light_vert.glsl"),
         fs_path: relative_path("shaders/pretty/light_frag.glsl"),
         fill_type: PrimitiveTopology::TriangleList,
         read_depth: true,
         write_depth: true,
-        // merge converts to Pos which is what we want
-        mesh: merge(&[sphere_mesh]),
+        mesh: only_pos(&sphere_mesh),
         custom_sets: vec![],
         custom_dynamic_state: None,
     }
@@ -174,7 +231,7 @@ fn main() {
         fill_type: PrimitiveTopology::TriangleList,
         read_depth: true,
         write_depth: true,
-        vtype: VertexType::<Pos>::new(),
+        vtype: VertexType::<VPos>::new(),
     };
     let pipe_caster = pipe_spec_caster.concrete(device.clone(), rpass_shadow.clone());
 
@@ -185,14 +242,7 @@ fn main() {
     };
     let pipe_prepass = pipe_spec_prepass.concrete(device.clone(), rpass_prepass.clone());
 
-    // concatenate all meshes
-    // we load them a second time, which i'd like to change at some point
-    let meshes: Vec<_> = tobj::load_obj(&relative_path("meshes/sponza/sponza.obj"))
-        .unwrap()
-        .0
-        .iter()
-        .map(|model| convert_mesh(&model.mesh))
-        .collect();
+    // merge meshes for use in depth prepass and shadow casting
     let merged_mesh = merge(&meshes);
     let model_set = pds_for_buffers(pipe_caster.clone(), &[model_buffer], 0).unwrap();
     let merged_object = ObjectPrototype {
@@ -201,7 +251,7 @@ fn main() {
         fill_type: PrimitiveTopology::TriangleList,
         read_depth: true,
         write_depth: true,
-        mesh: merged_mesh.clone(),
+        mesh: only_pos_from_ptnt(&merged_mesh),
         // copy the model matrix from the first object that we loaded earlier
         custom_sets: vec![model_set.clone()],
         custom_dynamic_state: None,
@@ -209,7 +259,7 @@ fn main() {
     .into_renderable_object(queue.clone());
 
     // create wireframe mesh
-    let wireframe_mesh = wireframe(&merged_mesh);
+    let wireframe_mesh = wireframe(&only_pos_from_ptnt(&merged_mesh));
     let wireframe_object = ObjectPrototype {
         // the light vertex shader does exactly the same we need to do, just
         // converts the position to screen space and nothing else, so we re-use
@@ -259,7 +309,7 @@ fn main() {
         let light_buffer = light.get_buffer(queue.clone());
         // used for color pass
         let camera_light_set = pds_for_buffers(
-            pipeline.clone(),
+            geo_pipeline.clone(),
             &[camera_buffer.clone(), light_buffer.clone()],
             3,
         )
@@ -432,8 +482,7 @@ fn main() {
         let geometry_light_model_set =
             pds_for_buffers(pipe_light.clone(), &[light_model_buffer.clone()], 1).unwrap();
 
-        let mut geometry_object_list: Vec<_> =
-            objects
+        let mut geometry_object_list: Vec<_> = objects
             .clone()
             .iter_mut()
             .map(|obj| {
@@ -455,7 +504,11 @@ fn main() {
             geometry_object_list.push(cur_wireframe_object.clone());
         }
 
-        if window.get_frame_info().keydowns.contains(&VirtualKeyCode::R) {
+        if window
+            .get_frame_info()
+            .keydowns
+            .contains(&VirtualKeyCode::R)
+        {
             draw_wireframe = !draw_wireframe;
         }
 
@@ -629,4 +682,13 @@ fn dynamic_state_for_bounds(origin: [f32; 2], dimensions: [f32; 2]) -> DynamicSt
         }]),
         scissors: None,
     }
+}
+
+#[allow(dead_code)]
+struct Material {
+    ambient: [f32; 4],
+    diffuse: [f32; 4],
+    specular: [f32; 4],
+    shininess: [f32; 4],
+    use_texture: [f32; 4],
 }

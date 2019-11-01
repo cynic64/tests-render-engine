@@ -11,11 +11,11 @@ layout(location = 2) out vec3 tan_cam_pos;
 layout(location = 3) out vec3 tan_frag_pos;
 
 layout(set = 0, binding = 0) uniform Material {
-  vec3 ambient;
-  vec3 diffuse;
-  vec3 specular;
-  vec3 shininess;
-  vec3 use_texture;
+  vec4 ambient;
+  vec4 diffuse;
+  vec4 specular;
+  vec4 shininess;
+  vec4 use_texture;
 } material;
 
 layout(set = 0, binding = 1) uniform Model {

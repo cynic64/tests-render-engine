@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use tests_render_engine::{default_sampler, relative_path, OrbitCamera};
-use tests_render_engine::mesh::{add_tangents, load_obj_single};
+use tests_render_engine::mesh::{add_tangents, convert_meshes, load_obj};
 
 fn main() {
     // initialize window
@@ -80,7 +80,8 @@ fn main() {
     let mut camera = OrbitCamera::default();
 
     // load mesh and create object
-    let basic_mesh = load_obj_single(&relative_path("meshes/raptor.obj"));
+    let (mut models, _materials) = load_obj(&relative_path("meshes/raptor.obj")).expect("couldn't load OBJ");
+    let basic_mesh = convert_meshes(&[models.remove(0)]).remove(0);
     let mesh = add_tangents(&basic_mesh);
 
     let mut object = ObjectPrototype {
