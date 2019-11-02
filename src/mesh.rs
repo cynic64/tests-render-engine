@@ -359,6 +359,13 @@ pub struct VPos2D {
 vulkano::impl_vertex!(VPos2D, position);
 
 #[derive(Default, Debug, Clone, Copy)]
+pub struct VPosColor2D {
+    pub position: [f32; 2],
+    pub color: [f32; 3],
+}
+vulkano::impl_vertex!(VPosColor2D, position, color);
+
+#[derive(Default, Debug, Clone, Copy)]
 pub struct VPosTexNorm {
     pub position: [f32; 3],
     pub tex_coord: [f32; 2],
