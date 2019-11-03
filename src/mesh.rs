@@ -9,6 +9,7 @@ use render_engine::mesh::{Mesh, ObjectPrototype, PrimitiveTopology, Vertex};
 use render_engine::system::RenderableObject;
 use render_engine::utils::load_texture;
 use render_engine::{Format, Pipeline, Queue, Set};
+use render_engine::data::NoData;
 
 use crate::{default_sampler, relative_path};
 
@@ -218,7 +219,7 @@ pub fn fullscreen_quad(queue: Queue, vs_path: PathBuf, fs_path: PathBuf) -> Rend
             ],
             indices: vec![0, 1, 2, 3],
         },
-        custom_sets: vec![],
+        custom_data: NoData {},
         custom_dynamic_state: None,
     }
     .into_renderable_object(queue)
