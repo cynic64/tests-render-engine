@@ -9,12 +9,12 @@ layout(location = 1) out vec3 v_normal;
 layout(location = 2) out vec2 v_tex_coord;
 
 layout(set = 0, binding = 0) uniform Model {
-    mat4 model;
+  mat4 model;
 } model;
 
-layout(set = 1, binding = 0) uniform Camera {
-    mat4 view;
-    mat4 proj;
+layout(set = 0, binding = 1) uniform Camera {
+  mat4 view;
+  mat4 proj;
 } camera;
 
 void main() {

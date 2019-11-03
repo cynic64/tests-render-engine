@@ -62,7 +62,7 @@ fn main() {
             ],
             indices: vec![0, 1, 2],
         },
-        custom_data: data,
+        custom_data: (data,),
         custom_dynamic_state: None,
     }
     .into_renderable_object(queue.clone());
