@@ -1,10 +1,8 @@
 use render_engine as re;
 
-use re::collection_cache::pds_for_buffers;
 use re::mesh::ObjectPrototype;
 use re::render_passes;
 use re::system::{Pass, System};
-use re::utils::bufferize_data;
 use re::window::Window;
 use re::mesh::PrimitiveTopology;
 
@@ -63,7 +61,9 @@ fn main() {
         read_depth: true,
         write_depth: true,
         mesh,
-        custom_data: (model_data, camera_data),
+        collection: (
+            (model_data, camera_data),
+        ),
         custom_dynamic_state: None,
     }
     .into_renderable_object(queue.clone());
@@ -81,7 +81,11 @@ fn main() {
         // concrete as possible. a SceneGraph trait would be most flexible! you
         // could define any struct you wanted to to store all your objects in
         // whatever fashion, and types would be included until very late.
-        object.custom_data = Arc::new((model_data, camera_data));
+        object.collection = Arc::new(
+            (
+                (model_data, camera_data),
+            )
+        );
 
         // replace old "geometry" object list
         all_objects.insert("geometry", vec![object.clone()]);
