@@ -4,16 +4,13 @@ use re::collection_cache::pds_for_buffers;
 use re::mesh::ObjectPrototype;
 use re::render_passes;
 use re::system::{Pass, System};
-use re::utils::bufferize_data;
 use re::window::Window;
 use re::mesh::{PrimitiveTopology, Mesh};
 
-use nalgebra_glm::*;
-
 use std::collections::HashMap;
 
-use tests_render_engine::mesh::{convert_meshes, load_obj, VPosColor2D};
-use tests_render_engine::{relative_path, OrbitCamera};
+use tests_render_engine::mesh::VPosColor2D;
+use tests_render_engine::relative_path;
 
 fn main() {
     // initialize window
@@ -61,7 +58,7 @@ fn main() {
             ],
             indices: vec![0, 1, 2],
         },
-        custom_sets: vec![],    // will be filled in later
+        collection: (),
         custom_dynamic_state: None,
     }
     .into_renderable_object(queue.clone());

@@ -218,7 +218,7 @@ pub fn fullscreen_quad(queue: Queue, vs_path: PathBuf, fs_path: PathBuf) -> Rend
             ],
             indices: vec![0, 1, 2, 3],
         },
-        custom_sets: vec![],
+        collection: (),
         custom_dynamic_state: None,
     }
     .into_renderable_object(queue)
