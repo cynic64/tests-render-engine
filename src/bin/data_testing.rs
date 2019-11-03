@@ -5,7 +5,6 @@ use re::render_passes;
 use re::system::{Pass, System};
 use re::window::Window;
 use re::mesh::{PrimitiveTopology, Mesh};
-use re::data::Data;
 
 use nalgebra_glm::*;
 
@@ -37,9 +36,7 @@ fn main() {
     window.set_render_pass(render_pass.clone());
 
     // create data for model matrix
-    let data = Data::<[[f32; 4]; 4]> {
-        data: scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into(),
-    };
+    let data: [[f32; 4]; 4] = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
 
     // create object
     let object = ObjectPrototype {
