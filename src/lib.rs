@@ -1,8 +1,6 @@
-use render_engine as re;
-
-use re::input::{FrameInfo, get_elapsed};
-use re::utils::bufferize_data;
-use re::{Buffer, Device, Queue};
+use render_engine::input::{FrameInfo, get_elapsed};
+use render_engine::utils::bufferize_data;
+use render_engine::{Buffer, Device, Queue};
 
 // TODO: move default-sampler to re
 use vulkano::sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode};
@@ -142,15 +140,12 @@ impl OrbitCamera {
         .into();
     }
 
-    pub fn get_buffer(&self, queue: Queue) -> Buffer {
-        bufferize_data(
-            queue,
-            CameraData {
-                view: self.view_mat,
-                proj: self.proj_mat,
-                pos: (self.front * self.orbit_distance).into(),
-            },
-        )
+    pub fn get_data(&self) -> CameraData {
+        CameraData {
+            view: self.view_mat,
+            proj: self.proj_mat,
+            pos: (self.front * self.orbit_distance).into(),
+        }
     }
 }
 
@@ -293,7 +288,8 @@ impl FlyCamera {
 }
 
 #[allow(dead_code)]
-struct CameraData {
+#[derive(Clone)]
+pub struct CameraData {
     view: CameraMatrix,
     proj: CameraMatrix,
     pos: [f32; 3],

@@ -11,6 +11,7 @@ use re::mesh::PrimitiveTopology;
 use nalgebra_glm::*;
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use tests_render_engine::mesh::{convert_meshes, load_obj};
 use tests_render_engine::{relative_path, OrbitCamera};
@@ -44,10 +45,10 @@ fn main() {
 
     // create buffer and set for model matrix
     let model_data: [[f32; 4]; 4] = Mat4::identity().into();
-    let model_buffer = bufferize_data(queue.clone(), model_data);
 
     // initialize camera
     let mut camera = OrbitCamera::default();
+    let camera_data = camera.get_data();
 
     // load, create pipeline spec and set for model matrix
     // only load 1st object
@@ -62,14 +63,10 @@ fn main() {
         read_depth: true,
         write_depth: true,
         mesh,
-        custom_sets: vec![],    // will be filled in later
+        custom_data: (model_data, camera_data),
         custom_dynamic_state: None,
     }
     .into_renderable_object(queue.clone());
-
-    let pipeline = object.pipeline_spec.concrete(device.clone(), render_pass.clone());
-    let model_set = pds_for_buffers(pipeline.clone(), &[model_buffer], 0).unwrap();
-    object.custom_sets = vec![model_set];
 
     // used in main loop
     let mut all_objects = HashMap::new();
@@ -78,18 +75,13 @@ fn main() {
         // update camera and camera buffer
         camera.update(window.get_frame_info());
 
-        let camera_buffer = camera.get_buffer(queue.clone());
-        let camera_set = pds_for_buffers(pipeline.clone(), &[camera_buffer], 1).unwrap();
+        let camera_data = camera.get_data();
 
-        // in the beginning, custom_sets only includes the model set. handle
-        // both cases.
-        if object.custom_sets.len() == 1 {
-            object.custom_sets.push(camera_set);
-        } else if object.custom_sets.len() == 2 {
-            object.custom_sets[1] = camera_set;
-        } else {
-            panic!("weird custom set length");
-        }
+        // TODO: i think it is better to move to a system where objects are as
+        // concrete as possible. a SceneGraph trait would be most flexible! you
+        // could define any struct you wanted to to store all your objects in
+        // whatever fashion, and types would be included until very late.
+        object.custom_data = Arc::new((model_data, camera_data));
 
         // replace old "geometry" object list
         all_objects.insert("geometry", vec![object.clone()]);
