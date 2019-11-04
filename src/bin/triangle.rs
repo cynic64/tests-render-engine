@@ -1,6 +1,5 @@
 use render_engine as re;
 
-use re::collection_cache::pds_for_buffers;
 use re::mesh::ObjectPrototype;
 use re::render_passes;
 use re::system::{Pass, System};

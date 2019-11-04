@@ -1,6 +1,7 @@
 use render_engine::input::{FrameInfo, get_elapsed};
 use render_engine::utils::bufferize_data;
 use render_engine::{Buffer, Device, Queue};
+use render_engine::collection::Data;
 
 // TODO: move default-sampler to re
 use vulkano::sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode};
@@ -9,11 +10,29 @@ use nalgebra_glm::*;
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::convert::From;
 
 pub mod mesh;
 
 pub fn relative_path(local_path: &str) -> PathBuf {
     [env!("CARGO_MANIFEST_DIR"), local_path].iter().collect()
+}
+
+#[derive(Clone, Copy)]
+pub struct Matrix4([[f32; 4]; 4]);
+impl Data for Matrix4 {}
+
+impl From<[[f32; 4]; 4]> for Matrix4 {
+    fn from(item: [[f32; 4]; 4]) -> Self {
+        Self(item)
+    }
+}
+
+impl From<Mat4> for Matrix4 {
+    fn from(item: Mat4) -> Self {
+        let data: [[f32; 4]; 4] = item.into();
+        Self(data)
+    }
 }
 
 #[derive(Clone)]
@@ -294,6 +313,7 @@ pub struct CameraData {
     proj: CameraMatrix,
     pos: [f32; 3],
 }
+impl Data for CameraData {}
 
 pub type CameraMatrix = [[f32; 4]; 4];
 

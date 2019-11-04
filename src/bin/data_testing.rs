@@ -11,7 +11,7 @@ use nalgebra_glm::*;
 use std::collections::HashMap;
 
 use tests_render_engine::mesh::VPosColor2D;
-use tests_render_engine::relative_path;
+use tests_render_engine::{relative_path, Matrix4};
 
 fn main() {
     // initialize window
@@ -36,7 +36,7 @@ fn main() {
     window.set_render_pass(render_pass.clone());
 
     // create data for model matrix
-    let data: [[f32; 4]; 4] = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
+    let data: Matrix4 = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
 
     // create object
     let object = ObjectPrototype {
@@ -62,7 +62,9 @@ fn main() {
             ],
             indices: vec![0, 1, 2],
         },
-        custom_data: (data,),
+        collection: (
+            (data,),
+        ),
         custom_dynamic_state: None,
     }
     .into_renderable_object(queue.clone());

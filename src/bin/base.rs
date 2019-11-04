@@ -1,10 +1,9 @@
 use render_engine as re;
 
-use re::mesh::ObjectPrototype;
+use re::mesh::{ObjectPrototype, PrimitiveTopology};
 use re::render_passes;
 use re::system::{Pass, System};
 use re::window::Window;
-use re::mesh::PrimitiveTopology;
 
 use nalgebra_glm::*;
 
@@ -12,7 +11,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use tests_render_engine::mesh::{convert_meshes, load_obj};
-use tests_render_engine::{relative_path, OrbitCamera};
+use tests_render_engine::{relative_path, OrbitCamera, Matrix4};
 
 fn main() {
     // initialize window
@@ -42,7 +41,7 @@ fn main() {
     window.set_render_pass(render_pass.clone());
 
     // create buffer and set for model matrix
-    let model_data: [[f32; 4]; 4] = Mat4::identity().into();
+    let model_data: Matrix4 = Mat4::identity().into();
 
     // initialize camera
     let mut camera = OrbitCamera::default();
