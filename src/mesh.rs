@@ -7,10 +7,10 @@ Object: mesh + other stuff.
 use render_engine::collection_cache::pds_for_images;
 use render_engine::mesh::{Mesh, ObjectPrototype, PrimitiveTopology, Vertex};
 use render_engine::system::RenderableObject;
-use render_engine::utils::load_texture;
+use render_engine::utils::{load_texture, default_sampler};
 use render_engine::{Format, Pipeline, Queue, Set};
 
-use crate::{default_sampler, relative_path};
+use crate::relative_path;
 
 use nalgebra_glm::*;
 

@@ -1,16 +1,15 @@
-use render_engine as re;
-
-use re::mesh::ObjectPrototype;
-use re::render_passes;
-use re::system::{Pass, System};
-use re::window::Window;
-use re::mesh::{PrimitiveTopology, Mesh};
+use render_engine::mesh::{Mesh, ObjectPrototype, PrimitiveTopology};
+use render_engine::render_passes;
+use render_engine::system::{Pass, System};
+use render_engine::utils::load_texture;
+use render_engine::window::Window;
+use render_engine::Format;
 
 use nalgebra_glm::*;
 
 use std::collections::HashMap;
 
-use tests_render_engine::mesh::VPosColor2D;
+use tests_render_engine::mesh::{VPos2D, VPosColor2D};
 use tests_render_engine::{relative_path, Matrix4};
 
 fn main() {
@@ -36,12 +35,12 @@ fn main() {
     window.set_render_pass(render_pass.clone());
 
     // create data for model matrix
-    let data: Matrix4 = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
+    let model_data: Matrix4 = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
 
-    // create object
-    let object = ObjectPrototype {
-        vs_path: relative_path("shaders/data-testing/vert.glsl"),
-        fs_path: relative_path("shaders/data-testing/frag.glsl"),
+    // create objects
+    let object1 = ObjectPrototype {
+        vs_path: relative_path("shaders/data-testing/vert_model.glsl"),
+        fs_path: relative_path("shaders/data-testing/frag_model.glsl"),
         fill_type: PrimitiveTopology::TriangleList,
         read_depth: false,
         write_depth: false,
@@ -62,16 +61,45 @@ fn main() {
             ],
             indices: vec![0, 1, 2],
         },
-        collection: (
-            (data,),
-        ),
+        collection: ((model_data,),),
+        custom_dynamic_state: None,
+    }
+    .into_renderable_object(queue.clone());
+
+    let texture = load_texture(
+        queue.clone(),
+        &relative_path("textures/raptor-diffuse.png"),
+        Format::B8G8R8A8Unorm,
+    );
+
+    let object2 = ObjectPrototype {
+        vs_path: relative_path("shaders/data-testing/vert_tex.glsl"),
+        fs_path: relative_path("shaders/data-testing/frag_tex.glsl"),
+        fill_type: PrimitiveTopology::TriangleList,
+        read_depth: false,
+        write_depth: false,
+        mesh: Mesh {
+            vertices: vec![
+                VPos2D {
+                    position: [0.0, -1.0],
+                },
+                VPos2D {
+                    position: [-1.0, 1.0],
+                },
+                VPos2D {
+                    position: [1.0, 1.0],
+                },
+            ],
+            indices: vec![0, 1, 2],
+        },
+        collection: ((texture,),),
         custom_dynamic_state: None,
     }
     .into_renderable_object(queue.clone());
 
     // used in main loop
     let mut all_objects = HashMap::new();
-    all_objects.insert("geometry", vec![object.clone()]);
+    all_objects.insert("geometry", vec![object2, object1]);
 
     while !window.update() {
         // draw

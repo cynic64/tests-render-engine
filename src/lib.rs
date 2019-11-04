@@ -1,15 +1,11 @@
 use render_engine::input::{FrameInfo, get_elapsed};
 use render_engine::utils::bufferize_data;
-use render_engine::{Buffer, Device, Queue};
+use render_engine::{Buffer, Queue};
 use render_engine::collection::Data;
-
-// TODO: move default-sampler to re
-use vulkano::sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode};
 
 use nalgebra_glm::*;
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::convert::From;
 
 pub mod mesh;
@@ -316,23 +312,6 @@ pub struct CameraData {
 impl Data for CameraData {}
 
 pub type CameraMatrix = [[f32; 4]; 4];
-
-pub fn default_sampler(device: Device) -> Arc<Sampler> {
-    Sampler::new(
-        device,
-        Filter::Linear,
-        Filter::Linear,
-        MipmapMode::Nearest,
-        SamplerAddressMode::Repeat,
-        SamplerAddressMode::Repeat,
-        SamplerAddressMode::Repeat,
-        0.0,
-        1.0,
-        0.0,
-        0.0,
-    )
-    .unwrap()
-}
 
 #[allow(dead_code)]
 pub struct Light {
