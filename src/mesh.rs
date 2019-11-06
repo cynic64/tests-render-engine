@@ -5,10 +5,10 @@ Object: mesh + other stuff.
  */
 
 use render_engine::collection_cache::pds_for_images;
-use render_engine::mesh::{Mesh, ObjectPrototype, PrimitiveTopology, Vertex};
-use render_engine::system::RenderableObject;
+use render_engine::mesh::{Mesh, PrimitiveTopology, Vertex};
 use render_engine::utils::{load_texture, default_sampler};
 use render_engine::{Format, Pipeline, Queue, Set};
+use render_engine::object::{ObjectPrototype, Object};
 
 use crate::relative_path;
 
@@ -194,7 +194,7 @@ pub fn add_tangents(mesh: &Mesh<VPosTexNorm>) -> Mesh<VPosTexNormTan> {
     }
 }
 
-pub fn fullscreen_quad(queue: Queue, vs_path: PathBuf, fs_path: PathBuf) -> RenderableObject {
+pub fn fullscreen_quad(queue: Queue, vs_path: PathBuf, fs_path: PathBuf) -> Object<()> {
     ObjectPrototype {
         vs_path,
         fs_path,
@@ -221,7 +221,7 @@ pub fn fullscreen_quad(queue: Queue, vs_path: PathBuf, fs_path: PathBuf) -> Rend
         collection: (),
         custom_dynamic_state: None,
     }
-    .into_renderable_object(queue)
+    .build(queue)
 }
 
 pub fn wireframe(mesh: &Mesh<VPos>) -> Mesh<VPos> {

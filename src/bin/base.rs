@@ -1,9 +1,8 @@
-use render_engine as re;
-
-use re::mesh::{ObjectPrototype, PrimitiveTopology};
-use re::render_passes;
-use re::system::{Pass, System};
-use re::window::Window;
+use render_engine::mesh::PrimitiveTopology;
+use render_engine::render_passes;
+use render_engine::system::{Pass, System};
+use render_engine::window::Window;
+use render_engine::object::{ObjectPrototype, Drawcall};
 
 use nalgebra_glm::*;
 
@@ -65,10 +64,10 @@ fn main() {
         ),
         custom_dynamic_state: None,
     }
-    .into_renderable_object(queue.clone());
+    .build(queue.clone());
 
     // used in main loop
-    let mut all_objects = HashMap::new();
+    let mut all_objects: HashMap<&str, Vec<Arc<dyn Drawcall>>> = HashMap::new();
 
     while !window.update() {
         // update camera and camera buffer
@@ -80,14 +79,10 @@ fn main() {
         // concrete as possible. a SceneGraph trait would be most flexible! you
         // could define any struct you wanted to to store all your objects in
         // whatever fashion, and types would be included until very late.
-        object.collection = Arc::new(
-            (
-                (model_data, camera_data),
-            )
-        );
+        (object.collection.0).1 = camera_data;
 
         // replace old "geometry" object list
-        all_objects.insert("geometry", vec![object.clone()]);
+        all_objects.insert("geometry", vec![Arc::new(object.clone())]);
 
         // draw
         system.render_to_window(&mut window, all_objects.clone());
