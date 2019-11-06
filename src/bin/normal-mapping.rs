@@ -5,15 +5,14 @@ Annoyances:
 Why do I have to manage queue and device? :(
 */
 
-use re::collection_cache::pds_for_buffers;
 use re::input::get_elapsed;
 use re::mesh::{Mesh, ObjectPrototype, PrimitiveTopology};
 use re::render_passes;
 use re::system::{Pass, System};
-use re::utils::{bufferize_data, load_texture};
+use re::utils::load_texture;
 use re::window::Window;
+use re::collection::Data;
 
-use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
 use vulkano::format::Format;
 
 use nalgebra_glm::*;
@@ -24,7 +23,7 @@ use std::sync::Arc;
 use tests_render_engine::mesh::{
     add_tangents, convert_meshes, load_obj, merge, only_pos_from_ptnt, wireframe, VPosTexNormTan,
 };
-use tests_render_engine::{default_sampler, relative_path, OrbitCamera};
+use tests_render_engine::{relative_path, OrbitCamera, Matrix4};
 
 fn main() {
     // initialize window
@@ -54,15 +53,27 @@ fn main() {
     window.set_render_pass(render_pass.clone());
 
     // create buffer for model matrix
-    let model_data: [[f32; 4]; 4] = translate(
+    let model_data: Matrix4 = translate(
         &scale(&Mat4::identity(), &vec3(1.0, 1.0, 1.0)),
         &vec3(0.0, -6.0, 0.0),
     )
     .into();
-    let model_buffer = bufferize_data(queue.clone(), model_data);
 
     // initialize camera
     let mut camera = OrbitCamera::default();
+    let camera_data = camera.get_data();
+
+    // textures
+    let normal_texture = load_texture(
+        queue.clone(),
+        &relative_path("textures/raptor-normal.png"),
+        Format::R8G8B8A8Unorm,
+    );
+
+    // light
+    let mut light = Light {
+        position: [10.0, 0.0, 0.0],
+    };
 
     // load meshes and create objects
     let (mut models, _materials) =
@@ -78,7 +89,12 @@ fn main() {
         write_depth: true,
         fill_type: PrimitiveTopology::TriangleList,
         mesh: raptor_mesh,
-        custom_sets: vec![],
+        collection: (
+            (model_data,),
+            (camera_data.clone(),),
+            (light.clone(),),
+            (normal_texture.clone(),),
+        ),
         custom_dynamic_state: None,
     }
     .into_renderable_object(queue.clone());
@@ -90,68 +106,46 @@ fn main() {
         write_depth: true,
         fill_type: PrimitiveTopology::LineList,
         mesh: normals_mesh,
-        custom_sets: vec![],
+        collection: (
+            (model_data,),
+            (camera_data,),
+        ),
         custom_dynamic_state: None,
     }
     .into_renderable_object(queue.clone());
 
-    // textures
-    let normal_texture = load_texture(
-        queue.clone(),
-        &relative_path("textures/raptor-normal.png"),
-        Format::R8G8B8A8Unorm,
-    );
-
-    // light
-    let mut light = Light {
-        position: [10.0, 0.0, 0.0],
-    };
-
     // used in main loop
     let mut all_objects = HashMap::new();
-    let raptor_pipe = raptor
-        .pipeline_spec
-        .concrete(device.clone(), render_pass.clone());
-    let normals_pipe = normals
-        .pipeline_spec
-        .concrete(device.clone(), render_pass.clone());
-    let sampler = default_sampler(device.clone());
     let start_time = std::time::Instant::now();
 
     while !window.update() {
         // update camera and camera buffer
         camera.update(window.get_frame_info());
-        let camera_buffer = camera.get_buffer(queue.clone());
+        let camera_data = camera.get_data();
 
         // update light
         let time = get_elapsed(start_time);
         let light_x = (time / 4.0).sin() * 20.0;
         let light_z = (time / 4.0).cos() * 20.0;
         light.position = [light_x, 0.0, light_z];
-        let light_buffer = bufferize_data(queue.clone(), light.clone());
 
-        // create set
-        raptor.custom_sets = vec![Arc::new(
-            PersistentDescriptorSet::start(raptor_pipe.clone(), 0)
-                .add_buffer(model_buffer.clone())
-                .unwrap()
-                .add_buffer(camera_buffer.clone())
-                .unwrap()
-                .add_buffer(light_buffer.clone())
-                .unwrap()
-                .add_sampled_image(normal_texture.clone(), sampler.clone())
-                .unwrap()
-                .build()
-                .unwrap(),
-        )];
+        // update raptor collection
+        raptor.collection = Arc::new(
+            (
+                (model_data,),
+                (camera_data.clone(),),
+                (light.clone(),),
+                (normal_texture.clone(),),
+            ),
+        );
 
-        let normals_set = pds_for_buffers(
-            normals_pipe.clone(),
-            &[model_buffer.clone(), camera_buffer.clone()],
-            0,
-        )
-        .unwrap(); // 0 is the descriptor set idx
-        normals.custom_sets = vec![normals_set];
+        // update normal vis collection
+        normals.collection = Arc::new(
+            (
+                (model_data,),
+                (camera_data,),
+            ),
+        );
 
         if window.get_frame_info().keys_down.c {
             raptor.pipeline_spec.fs_path =
@@ -242,6 +236,8 @@ fn normals_vis(mesh: &Mesh<VPosTexNormTan>) -> Mesh<VPosColor> {
 struct Light {
     position: [f32; 3],
 }
+
+impl Data for Light {}
 
 #[derive(Default, Debug, Clone, Copy)]
 struct VPosColor {

@@ -16,17 +16,17 @@ layout(set = 0, binding = 0) uniform Model {
     mat4 model;
 } model;
 
-layout(set = 0, binding = 1) uniform Camera {
+layout(set = 1, binding = 0) uniform Camera {
     mat4 view;
     mat4 proj;
     vec3 pos;
 } camera;
 
-layout(set = 0, binding = 2) uniform Light {
+layout(set = 2, binding = 0) uniform Light {
     vec3 pos;
 } light;
 
-layout(set = 0, binding = 3) uniform sampler2D normal_tex;
+layout(set = 3, binding = 0) uniform sampler2D normal_tex;
 
 void main() {
      v_pos = vec3(model.model * vec4(position, 1.0));

@@ -83,7 +83,6 @@ fn main() {
             Pass {
                 name: "depth_viewer",
                 images_created_tags: vec!["depth_view"],
-                // images_needed_tags: vec!["shadow_map_blur"],
                 images_needed_tags: vec!["depth_prepass"],
                 render_pass: rpass_cubeview.clone(),
             },
