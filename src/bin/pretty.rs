@@ -1,27 +1,26 @@
-use render_engine as re;
-
-use re::collection_cache::pds_for_buffers;
-use re::input::{get_elapsed, VirtualKeyCode};
-use re::mesh::{ObjectPrototype, PrimitiveTopology, VertexType};
-use re::pipeline_cache::PipelineSpec;
-use re::render_passes;
-use re::system::{Pass, RenderableObject, System};
-use re::utils::{bufferize_data, Timer};
-use re::window::Window;
-use re::{Buffer, Format, Image, Pipeline, Queue, Set};
+use render_engine::collection::Data;
+use render_engine::input::{get_elapsed, VirtualKeyCode};
+use render_engine::mesh::PrimitiveTopology;
+use render_engine::object::{Drawcall, Object, ObjectPrototype};
+use render_engine::render_passes;
+use render_engine::system::{Pass, System};
+use render_engine::utils::Timer;
+use render_engine::window::Window;
+use render_engine::{Format, Image};
 
 use vulkano::command_buffer::DynamicState;
 use vulkano::pipeline::viewport::Viewport;
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use nalgebra_glm::*;
 
 use tests_render_engine::mesh::{
-    add_tangents_multi, convert_meshes, fullscreen_quad, load_obj, merge, wireframe, VPos,
-    VPosTexNormTan, load_textures, only_pos_from_ptnt, only_pos,
+    add_tangents_multi, convert_meshes, fullscreen_quad, load_obj, load_textures, merge, only_pos,
+    only_pos_from_ptnt, wireframe,
 };
-use tests_render_engine::{relative_path, FlyCamera};
+use tests_render_engine::{relative_path, FlyCamera, Matrix4};
 
 const SHADOW_MAP_DIMS: [u32; 2] = [6_144, 1024];
 const PATCH_DIMS: [f32; 2] = [1024.0, 1024.0];
@@ -104,13 +103,14 @@ fn main() {
     let mut camera = FlyCamera::default();
     camera.yaw = 0.0;
     camera.position = vec3(0.0, 10.0, 0.0);
+    let camera_data = camera.get_data();
 
     // light
     let light = MovingLight::new();
+    let light_data = light.get_data();
 
     // a model buffer with .1 scale, used for a couple different objects
-    let model_data: [[f32; 4]; 4] = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
-    let model_buffer = bufferize_data(queue.clone(), model_data);
+    let model_data: Matrix4 = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
 
     // a default material, at some point I want to get rid of Material
     // altogether and just use textures
@@ -121,23 +121,6 @@ fn main() {
         shininess: [32.0, 0.0, 0.0, 0.0],
         use_texture: [1.0, 1.0, 1.0, 1.0],
     };
-    let material_buffer = bufferize_data(queue.clone(), material_data);
-
-    // create a pipeline matching the one that will be used by the geometry
-    // pass, needed for creating textures and so on.
-    let geo_pipeline = PipelineSpec {
-        vs_path: relative_path("shaders/pretty/vert.glsl"),
-        fs_path: relative_path("shaders/pretty/all_frag.glsl"),
-        fill_type: PrimitiveTopology::TriangleList,
-        read_depth: true,
-        // we use a depth prepass so don't write to the depth buffer
-        write_depth: false,
-        vtype: VertexType::<VPosTexNormTan>::new(),
-    }
-    .concrete(device.clone(), render_pass.clone());
-
-    // set including model and material, used in geometry pass
-    let mat_model_set = pds_for_buffers(geo_pipeline.clone(), &[material_buffer, model_buffer.clone()], 1).unwrap();
 
     // load obj
     let (models, materials) =
@@ -145,18 +128,10 @@ fn main() {
 
     // convert to meshes and load textures
     let meshes = add_tangents_multi(&convert_meshes(&models));
-    let texture_sets = load_textures(
-        queue.clone(),
-        geo_pipeline.clone(),
-        &relative_path("meshes/sponza/"),
-        &materials,
-        // descriptor set idx textures will be bound to. it's set to 2 in the
-        // fragment shader, so this has to be 2 as well.
-        2,
-    );
+    let textures = load_textures(queue.clone(), &relative_path("meshes/sponza/"), &materials);
 
-    // create renderable objects for geometry pass
-    let mut objects: Vec<RenderableObject> = meshes
+    // create objects for the geometry pass
+    let mut geo_objects: Vec<Object<_>> = meshes
         .iter()
         .enumerate()
         .map(|(idx, mesh)| {
@@ -168,7 +143,7 @@ fn main() {
                 println!("Model {} has no material id! Using 0.", model.name);
                 0
             };
-            let texture_set = texture_sets[mat_idx].clone();
+            let textures = textures[mat_idx].clone();
 
             ObjectPrototype {
                 vs_path: relative_path("shaders/pretty/vert.glsl"),
@@ -177,36 +152,18 @@ fn main() {
                 read_depth: true,
                 write_depth: true,
                 mesh: mesh.clone(),
-                custom_sets: vec![mat_model_set.clone(), texture_set],
+                collection: (
+                    (material_data.clone(), model_data),
+                    textures,
+                    (camera_data.clone(), light_data.clone()),
+                ),
                 custom_dynamic_state: None,
             }
-            .into_renderable_object(queue.clone())
+            .build(queue.clone())
         })
         .collect();
 
-    println!("Objects Loaded: {}", objects.len());
-
-    // load sphere to show light's position
-    let sphere_mesh = {
-        let (models, _materials) = load_obj(&relative_path("meshes/sphere.obj")).expect("Couldn't load OBJ file");
-        convert_meshes(&[models[0].clone()]).remove(0)
-    };
-    let mut sphere = ObjectPrototype {
-        vs_path: relative_path("shaders/pretty/light_vert.glsl"),
-        fs_path: relative_path("shaders/pretty/light_frag.glsl"),
-        fill_type: PrimitiveTopology::TriangleList,
-        read_depth: true,
-        write_depth: true,
-        mesh: only_pos(&sphere_mesh),
-        custom_sets: vec![],
-        custom_dynamic_state: None,
-    }
-    .into_renderable_object(queue.clone());
-    let pipe_light = sphere
-        .pipeline_spec
-        .concrete(device.clone(), render_pass.clone());
-    let model_set = pds_for_buffers(pipe_light.clone(), &[model_buffer.clone()], 1).unwrap();
-    sphere.custom_sets = vec![model_set];
+    println!("Objects Loaded: {}", geo_objects.len());
 
     // shadow stuff
     // create fullscreen quad to debug cubemap
@@ -224,42 +181,76 @@ fn main() {
     );
     quad_blur.pipeline_spec.write_depth = true;
 
-    let pipe_spec_caster = PipelineSpec {
-        vs_path: relative_path("shaders/pretty/shadow_cast_vert.glsl"),
-        fs_path: relative_path("shaders/pretty/shadow_cast_frag.glsl"),
-        fill_type: PrimitiveTopology::TriangleList,
-        read_depth: true,
-        write_depth: true,
-        vtype: VertexType::<VPos>::new(),
-    };
-    let pipe_caster = pipe_spec_caster.concrete(device.clone(), rpass_shadow.clone());
-
-    let pipe_spec_prepass = PipelineSpec {
-        vs_path: relative_path("shaders/pretty/depth_prepass_vert.glsl"),
-        fs_path: relative_path("shaders/pretty/depth_prepass_frag.glsl"),
-        ..pipe_spec_caster.clone()
-    };
-    let pipe_prepass = pipe_spec_prepass.concrete(device.clone(), rpass_prepass.clone());
-
     // merge meshes for use in depth prepass and shadow casting
     let merged_mesh = merge(&meshes);
-    let model_set = pds_for_buffers(pipe_caster.clone(), &[model_buffer], 0).unwrap();
-    let merged_object = ObjectPrototype {
+    let merged_mesh_pos_only = only_pos_from_ptnt(&merged_mesh);
+
+    let shadow_cast_base = ObjectPrototype {
         vs_path: relative_path("shaders/pretty/shadow_cast_vert.glsl"),
         fs_path: relative_path("shaders/pretty/shadow_cast_frag.glsl"),
         fill_type: PrimitiveTopology::TriangleList,
         read_depth: true,
         write_depth: true,
-        mesh: only_pos_from_ptnt(&merged_mesh),
-        // copy the model matrix from the first object that we loaded earlier
-        custom_sets: vec![model_set.clone()],
+        mesh: merged_mesh_pos_only.clone(),
+        // convert_to_shadow_casters adds proper collections
+        collection: (),
         custom_dynamic_state: None,
     }
-    .into_renderable_object(queue.clone());
+    .build(queue.clone());
+
+    let mut depth_prepass_object = ObjectPrototype {
+        vs_path: relative_path("shaders/pretty/depth_prepass_vert.glsl"),
+        fs_path: relative_path("shaders/pretty/depth_prepass_frag.glsl"),
+        fill_type: PrimitiveTopology::TriangleList,
+        read_depth: true,
+        write_depth: true,
+        mesh: merged_mesh_pos_only,
+        collection: ((model_data,), (camera_data.clone(),)),
+        custom_dynamic_state: None,
+    }
+    .build(queue.clone());
+
+    // create mesh for light (just a sphere)
+    // we need 2 objects: one for the depth prepass and one for the geometry stage
+    let light_mesh = {
+        let (models, _materials) =
+            load_obj(&relative_path("meshes/sphere.obj")).expect("Couldn't load OBJ file");
+        convert_meshes(&[models[0].clone()]).remove(0)
+    };
+
+    let mut light_object_prepass = ObjectPrototype {
+        vs_path: relative_path("shaders/pretty/depth_prepass_vert.glsl"),
+        fs_path: relative_path("shaders/pretty/depth_prepass_frag.glsl"),
+        fill_type: PrimitiveTopology::TriangleList,
+        read_depth: true,
+        write_depth: true,
+        mesh: only_pos(&light_mesh),
+        collection: ((model_data,), (camera_data.clone(),)),
+        custom_dynamic_state: None,
+    }
+    .build(queue.clone());
+
+    let mut light_object_geo = ObjectPrototype {
+        vs_path: relative_path("shaders/pretty/vert.glsl"),
+        fs_path: relative_path("shaders/pretty/light_frag.glsl"),
+        fill_type: PrimitiveTopology::TriangleList,
+        read_depth: true,
+        write_depth: true,
+        mesh: light_mesh,
+        collection: (
+            (material_data.clone(), model_data),
+            // take the textures of the first object just to fill the space
+            // maybe eventually give the light its own vertex shader
+            textures[0].clone(),
+            (camera_data.clone(), light_data.clone()),
+        ),
+        custom_dynamic_state: None,
+    }
+    .build(queue.clone());
 
     // create wireframe mesh
     let wireframe_mesh = wireframe(&only_pos_from_ptnt(&merged_mesh));
-    let wireframe_object = ObjectPrototype {
+    let mut wireframe_object = ObjectPrototype {
         // the light vertex shader does exactly the same we need to do, just
         // converts the position to screen space and nothing else, so we re-use
         // it
@@ -269,19 +260,19 @@ fn main() {
         read_depth: true,
         write_depth: true,
         mesh: wireframe_mesh,
-        custom_sets: vec![model_set.clone()],
+        collection: ((model_data,), (camera_data,)),
         custom_dynamic_state: None,
     }
-    .into_renderable_object(queue.clone());
+    .build(queue.clone());
 
-    let mut all_objects = HashMap::new();
+    let mut all_objects: HashMap<&str, Vec<Arc<dyn Drawcall>>> = HashMap::new();
 
     // used in main loop
     let mut timer_setup = Timer::new("Setup time");
     let mut timer_draw = Timer::new("Overall draw time");
 
-    all_objects.insert("depth_viewer", vec![quad_display]);
-    all_objects.insert("shadow_blur", vec![quad_blur]);
+    all_objects.insert("depth_viewer", vec![Arc::new(quad_display)]);
+    all_objects.insert("shadow_blur", vec![Arc::new(quad_blur)]);
 
     let mut view_mode: i32 = 0;
     let mut update_view = false;
@@ -292,45 +283,35 @@ fn main() {
         timer_setup.start();
 
         // convert merged mesh into 6 casters, one for each cubemap face
-        let shadow_casters = convert_to_shadow_casters(
-            queue.clone(),
-            pipe_caster.clone(),
-            merged_object.clone(),
-            light.get_position(),
-        );
+        let shadow_casters = convert_to_shadow_casters(shadow_cast_base.clone(), light.get_data());
         // update camera, but only if we're grabbing the cursor
         if cursor_grabbed {
             camera.update(window.get_frame_info());
         }
-        let camera_buffer = camera.get_buffer(queue.clone());
+        let camera_data = camera.get_data();
 
         // update light
-        let light_buffer = light.get_buffer(queue.clone());
-        // used for color pass
-        let camera_light_set = pds_for_buffers(
-            geo_pipeline.clone(),
-            &[camera_buffer.clone(), light_buffer.clone()],
-            3,
-        )
-        .unwrap(); // 0 is the descriptor set idx
-                   // used for shadow pass
-        let light_set = pds_for_buffers(pipe_caster.clone(), &[light_buffer], 3).unwrap();
-        let camera_set = pds_for_buffers(pipe_prepass.clone(), &[camera_buffer], 1).unwrap();
+        let light_data = light.get_data();
 
-        let mut depth_prepass_object = merged_object.clone();
-        depth_prepass_object.custom_sets.push(camera_set.clone());
-        depth_prepass_object.pipeline_spec = pipe_spec_prepass.clone();
-        let mut light_object = sphere.clone();
-        let light_model_matrix = scale(
-            &translate(&Mat4::identity(), &make_vec3(&light.get_position())),
+        // update depth prepass objects' collections
+        (depth_prepass_object.collection.1).0 = camera_data.clone();
+        (light_object_prepass.collection.1).0 = camera_data.clone();
+
+        // the light has moved, we need to update its model matrix
+        let light_model_data: Matrix4 = scale(
+            &translate(&Mat4::identity(), &make_vec3(&light_data.position)),
             &vec3(0.03, 0.03, 0.03),
+        )
+        .into();
+        (light_object_prepass.collection.0).0 = light_model_data;
+
+        all_objects.insert(
+            "depth_prepass",
+            vec![
+                Arc::new(depth_prepass_object.clone()),
+                Arc::new(light_object_prepass.clone()),
+            ],
         );
-        let light_model_buffer = bufferize_data(queue.clone(), light_model_matrix);
-        let prepass_light_model_set =
-            pds_for_buffers(pipe_prepass.clone(), &[light_model_buffer.clone()], 0).unwrap();
-        light_object.custom_sets = vec![prepass_light_model_set, camera_set.clone()];
-        light_object.pipeline_spec = pipe_spec_prepass.clone();
-        all_objects.insert("depth_prepass", vec![depth_prepass_object, light_object]);
 
         if window
             .get_frame_info()
@@ -348,7 +329,7 @@ fn main() {
                 }
                 1 => {
                     // pure white
-                    objects.iter_mut().for_each(|obj| {
+                    geo_objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path = relative_path("shaders/pretty/white_frag.glsl");
                     });
                     system.output_tag = "color";
@@ -359,7 +340,7 @@ fn main() {
                 }
                 3 => {
                     // diffuse_only
-                    objects.iter_mut().for_each(|obj| {
+                    geo_objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path =
                             relative_path("shaders/pretty/diffuse_only_frag.glsl");
                     });
@@ -367,7 +348,7 @@ fn main() {
                 }
                 4 => {
                     // diffuse and light direction
-                    objects.iter_mut().for_each(|obj| {
+                    geo_objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path =
                             relative_path("shaders/pretty/diffuse_and_light_frag.glsl");
                     });
@@ -375,7 +356,7 @@ fn main() {
                 }
                 5 => {
                     // diffuse and light distance + direction
-                    objects.iter_mut().for_each(|obj| {
+                    geo_objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path =
                             relative_path("shaders/pretty/diffuse_light_distance_frag.glsl");
                     });
@@ -383,7 +364,7 @@ fn main() {
                 }
                 6 => {
                     // diffuse and specular
-                    objects.iter_mut().for_each(|obj| {
+                    geo_objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path =
                             relative_path("shaders/pretty/diffuse_and_spec.glsl");
                     });
@@ -391,7 +372,7 @@ fn main() {
                 }
                 7 => {
                     // diffuse, specular, normal mapping
-                    objects.iter_mut().for_each(|obj| {
+                    geo_objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path =
                             relative_path("shaders/pretty/diffuse_spec_normal.glsl");
                     });
@@ -399,7 +380,7 @@ fn main() {
                 }
                 8 => {
                     // shadows only
-                    objects.iter_mut().for_each(|obj| {
+                    geo_objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path =
                             relative_path("shaders/pretty/shadows_only.glsl");
                     });
@@ -407,7 +388,7 @@ fn main() {
                 }
                 9 => {
                     // diffuse + spec + normal mapping + shadows
-                    objects.iter_mut().for_each(|obj| {
+                    geo_objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path =
                             relative_path("shaders/pretty/shadows_and_color.glsl");
                     });
@@ -415,14 +396,14 @@ fn main() {
                 }
                 10 => {
                     // diffuse + spec + normal mapping + shadows + tonemapping
-                    objects.iter_mut().for_each(|obj| {
+                    geo_objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path = relative_path("shaders/pretty/all_frag.glsl");
                     });
                     system.output_tag = "color";
                 }
                 11 => {
                     // specular only
-                    objects.iter_mut().for_each(|obj| {
+                    geo_objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path =
                             relative_path("shaders/pretty/specular_only.glsl");
                     });
@@ -430,7 +411,7 @@ fn main() {
                 }
                 12 => {
                     // specular only, low shininess
-                    objects.iter_mut().for_each(|obj| {
+                    geo_objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path =
                             relative_path("shaders/pretty/specular_only_2.glsl");
                     });
@@ -438,14 +419,14 @@ fn main() {
                 }
                 13 => {
                     // normals
-                    objects.iter_mut().for_each(|obj| {
+                    geo_objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path =
                             relative_path("shaders/pretty/normals_only.glsl");
                     });
                     system.output_tag = "color";
                 }
                 _ => {
-                    objects.iter_mut().for_each(|obj| {
+                    geo_objects.iter_mut().for_each(|obj| {
                         obj.pipeline_spec.fs_path = relative_path("shaders/pretty/all_frag.glsl");
                     });
                     view_mode = 0;
@@ -478,29 +459,15 @@ fn main() {
             }
         }
 
-        let geometry_light_model_set =
-            pds_for_buffers(pipe_light.clone(), &[light_model_buffer.clone()], 1).unwrap();
+        (light_object_geo.collection.0).1 = light_model_data;
 
-        let mut geometry_object_list: Vec<_> = objects
-            .clone()
+        geo_objects
             .iter_mut()
-            .map(|obj| {
-                obj.pipeline_spec.write_depth = false;
-                obj.pipeline_spec.read_depth = true;
-                // add camera set to each object before adding it to the scene
-                obj.custom_sets.push(camera_light_set.clone());
-                obj.clone()
-            })
-            .collect();
-
-        let mut cur_sphere = sphere.clone();
-        cur_sphere.custom_sets = vec![geometry_light_model_set, camera_set.clone()];
-        geometry_object_list.push(cur_sphere);
+            .for_each(|obj| obj.collection.2 = (camera_data.clone(), light_data.clone()));
 
         if draw_wireframe {
-            let mut cur_wireframe_object = wireframe_object.clone();
-            cur_wireframe_object.custom_sets.push(camera_set.clone());
-            geometry_object_list.push(cur_wireframe_object.clone());
+            (wireframe_object.collection.1).0 = camera_data.clone();
+            // geometry_object_list.push(cur_wireframe_object.clone());
         }
 
         if window
@@ -511,23 +478,31 @@ fn main() {
             draw_wireframe = !draw_wireframe;
         }
 
-        all_objects.insert("geometry", geometry_object_list);
-
+        all_objects.insert(
+            "geometry",
+            geo_objects
+                .iter()
+                .map(|obj| {
+                    let dc: Arc<dyn Drawcall> = Arc::new(obj.clone());
+                    dc
+                })
+                .collect(),
+        );
         all_objects.insert(
             "shadow",
             shadow_casters
-                .clone()
-                .iter_mut()
+                .iter()
                 .map(|obj| {
-                    // add camera set to each object before adding it to the scene
-                    obj.custom_sets.push(light_set.clone());
-                    obj.clone()
+                    let dc: Arc<dyn Drawcall> = Arc::new(obj.clone());
+                    dc
                 })
                 .collect(),
         );
 
+        /*
         let mut cur_wireframe_object = wireframe_object.clone();
         cur_wireframe_object.custom_sets.push(camera_set.clone());
+        */
 
         timer_setup.stop();
 
@@ -545,10 +520,13 @@ fn main() {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 struct Light {
     position: [f32; 4],
     strength: f32,
 }
+
+impl Data for Light {}
 
 struct MovingLight {
     start_time: std::time::Instant,
@@ -561,29 +539,19 @@ impl MovingLight {
         }
     }
 
-    fn get_buffer(&self, queue: Queue) -> Buffer {
+    fn get_data(&self) -> Light {
         let time = get_elapsed(self.start_time) / 16.0;
-        let data = Light {
-            // position: [time.sin(), 10.0, time.cos(), 0.0],
+        Light {
             position: [time.sin() * 100.0, 10.0, 0.0, 0.0],
             strength: 1.0,
-        };
-
-        bufferize_data(queue.clone(), data)
-    }
-
-    fn get_position(&self) -> [f32; 3] {
-        let time = get_elapsed(self.start_time) / 16.0;
-        [time.sin() * 100.0, 10.0, 0.0]
+        }
     }
 }
 
 fn convert_to_shadow_casters(
-    queue: Queue,
-    pipeline: Pipeline,
-    base_object: RenderableObject,
-    light_pos: [f32; 3],
-) -> Vec<RenderableObject> {
+    base_object: Object<()>,
+    light_data: Light,
+) -> Vec<Object<((Matrix4,), (Matrix4,), (Matrix4,), (Light,))>> {
     // if you want to make point lamps cast shadows, you need shadow cubemaps
     // render-engine doesn't support geometry shaders, so the easiest way to do
     // this is to convert one object into 6 different ones, one for each face of
@@ -616,29 +584,23 @@ fn convert_to_shadow_casters(
         [5.0, 0.0],
     ];
 
-    let proj_set = create_projection_set(queue.clone(), pipeline.clone());
+    let (near, far) = (1.0, 250.0);
+    // pi / 2 = 90 deg., 1.0 = aspect ratio
+    // we use a fov 1% too big to make sure sampling doesn't go between patches
+    let proj_data: Matrix4 = perspective(1.0, std::f32::consts::PI / 2.0 * 1.01, near, far).into();
 
-    let model_data: [[f32; 4]; 4] = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
-    let model_buffer = bufferize_data(queue.clone(), model_data);
-    let model_set = pds_for_buffers(pipeline.clone(), &[model_buffer], 0).unwrap();
+    let model_data: Matrix4 = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
 
-    let light_pos = make_vec3(&light_pos);
+    let light_pos = make_vec3(&light_data.position);
 
     view_directions
         .iter()
         .zip(&up_directions)
         .zip(&patch_positions)
         .map(|((dir, up), patch_pos): ((&Vec3, &Vec3), &[f32; 2])| {
-            let view_matrix: [[f32; 4]; 4] = look_at(&light_pos, &(light_pos + dir), up).into();
-            let view_buffer = bufferize_data(queue.clone(), view_matrix);
-            let set = pds_for_buffers(pipeline.clone(), &[view_buffer], 2).unwrap();
+            let view_data: Matrix4 = look_at(&light_pos, &(light_pos + dir), up).into();
 
-            // all sets for the dragon we're currently creating
-            // we take the model set from the base dragon
-            // (set 0)
-            let custom_sets = vec![model_set.clone(), proj_set.clone(), set];
-
-            // dynamic state for the current dragon, represents which part
+            // dynamic state for the current cubemap face, represents which part
             // of the patched texture we draw to
             let margin = 0.0;
             let origin = [
@@ -650,25 +612,20 @@ fn convert_to_shadow_casters(
                 [PATCH_DIMS[0] - margin * 2.0, PATCH_DIMS[1] - margin * 2.0],
             );
 
-            RenderableObject {
-                // model and proj are in set 0 and 1
-                custom_sets,
+            Object {
+                pipeline_spec: base_object.pipeline_spec.clone(),
+                vbuf: base_object.vbuf.clone(),
+                ibuf: base_object.ibuf.clone(),
+                collection: (
+                    (model_data,),
+                    (proj_data,),
+                    (view_data,),
+                    (light_data.clone(),),
+                ),
                 custom_dynamic_state: Some(dynamic_state),
-                ..base_object.clone()
             }
         })
         .collect()
-}
-
-fn create_projection_set(queue: Queue, pipeline: Pipeline) -> Set {
-    let (near, far) = (1.0, 250.0);
-    // pi / 2 = 90 deg., 1.0 = aspect ratio
-    // we use a fov 1% too big to make sure sampling doesn't go between patches
-    let proj_data: [[f32; 4]; 4] =
-        perspective(1.0, std::f32::consts::PI / 2.0 * 1.01, near, far).into();
-    let proj_buffer = bufferize_data(queue, proj_data);
-
-    pds_for_buffers(pipeline, &[proj_buffer], 1).unwrap()
 }
 
 fn dynamic_state_for_bounds(origin: [f32; 2], dimensions: [f32; 2]) -> DynamicState {
@@ -684,6 +641,7 @@ fn dynamic_state_for_bounds(origin: [f32; 2], dimensions: [f32; 2]) -> DynamicSt
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 struct Material {
     ambient: [f32; 4],
     diffuse: [f32; 4],
@@ -691,3 +649,5 @@ struct Material {
     shininess: [f32; 4],
     use_texture: [f32; 4],
 }
+
+impl Data for Material {}

@@ -4,10 +4,9 @@ Mesh: vertices and indices, nothing else
 Object: mesh + other stuff.
  */
 
-use render_engine::collection_cache::pds_for_images;
 use render_engine::mesh::{Mesh, PrimitiveTopology, Vertex};
-use render_engine::utils::{load_texture, default_sampler};
-use render_engine::{Format, Pipeline, Queue, Set};
+use render_engine::utils::load_texture;
+use render_engine::{Format, Queue, Image};
 use render_engine::object::{ObjectPrototype, Object};
 
 use crate::relative_path;
@@ -30,15 +29,12 @@ pub fn convert_meshes(models: &[tobj::Model]) -> Vec<Mesh<VPosTexNorm>> {
 
 pub fn load_textures(
     queue: Queue,
-    pipeline: Pipeline,
     root_path: &Path,
     materials: &[tobj::Material],
-    set_idx: usize,
-) -> Vec<Set> {
-    // loads all textures in the materials provided and creates a descriptor set
-    // for each. Each set will have the same index: set_idx
-    let sampler = default_sampler(queue.device().clone());
-
+) -> Vec<(Image, Image, Image)> {
+    // loads all textures for all materials provided by returning 3 images for
+    // each material: a diffuse texture, a specular texture, and a normal
+    // texture, in that order
     materials
         .iter()
         .map(|mat| {
@@ -102,13 +98,7 @@ pub fn load_textures(
             let spec_tex = load_texture(queue.clone(), &spec_path, Format::R8G8B8A8Unorm);
             let norm_tex = load_texture(queue.clone(), &normal_path, Format::R8G8B8A8Unorm);
 
-            pds_for_images(
-                sampler.clone(),
-                pipeline.clone(),
-                &[diff_tex, spec_tex, norm_tex],
-                set_idx,
-            )
-            .unwrap()
+            (diff_tex, spec_tex, norm_tex)
         })
         .collect()
 }

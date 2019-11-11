@@ -290,15 +290,12 @@ impl FlyCamera {
         .into();
     }
 
-    pub fn get_buffer(&self, queue: Queue) -> Buffer {
-        bufferize_data(
-            queue,
-            CameraData {
-                view: self.view_mat,
-                proj: self.proj_mat,
-                pos: self.position.into(),
-            },
-        )
+    pub fn get_data(&self) -> CameraData {
+        CameraData {
+            view: self.view_mat,
+            proj: self.proj_mat,
+            pos: self.position.into(),
+        }
     }
 }
 
