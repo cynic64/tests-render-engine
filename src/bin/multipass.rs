@@ -8,7 +8,7 @@ use re::mesh::{PrimitiveTopology, Mesh};
 
 use std::collections::HashMap;
 
-use tests_render_engine::mesh::VPosColor2D;
+use tests_render_engine::mesh::{VPosColor2D, fullscreen_quad};
 use tests_render_engine::relative_path;
 
 fn main() {
@@ -20,23 +20,32 @@ fn main() {
     let render_pass = render_passes::basic(device.clone());
     let mut system = System::new(
         queue.clone(),
-        vec![Pass {
-            name: "geometry",
-            images_created_tags: vec!["color"],
-            images_needed_tags: vec![],
-            render_pass: render_pass.clone(),
-        }],
+        vec![
+            Pass {
+                name: "geometry",
+                images_created_tags: vec!["geo"],
+                images_needed_tags: vec![],
+                render_pass: render_pass.clone(),
+            },
+            Pass {
+                name: "postprocess",
+                images_created_tags: vec!["final"],
+                images_needed_tags: vec!["geo"],
+                render_pass: render_pass.clone(),
+            },
+        ],
         // custom images, we use none
         HashMap::new(),
-        "color",
+        "final",
     );
 
     window.set_render_pass(render_pass.clone());
 
-    // load, create pipeline spec and set for model matrix
-    let object = ObjectPrototype {
-        vs_path: relative_path("shaders/triangle/vert.glsl"),
-        fs_path: relative_path("shaders/triangle/frag.glsl"),
+    // there are 2 objects: the triangle and a fullscreen quad used to do
+    // postprocessing in a separate pass
+    let triangle = ObjectPrototype {
+        vs_path: relative_path("shaders/multipass/tri_vert.glsl"),
+        fs_path: relative_path("shaders/multipass/tri_frag.glsl"),
         fill_type: PrimitiveTopology::TriangleList,
         read_depth: false,
         write_depth: false,
@@ -62,10 +71,18 @@ fn main() {
     }
     .build(queue.clone());
 
+    let quad = fullscreen_quad(
+        queue.clone(),
+        relative_path("shaders/multipass/postpro_vert.glsl"),
+        relative_path("shaders/multipass/postpro_frag.glsl"),
+    );
+
     while !window.update() {
         // draw
         system.start_window(&mut window);
-        system.add_object(&object);
+        system.add_object(&triangle);
+        system.next_pass();
+        system.add_object(&quad);
         system.finish_to_window(&mut window);
     }
 
