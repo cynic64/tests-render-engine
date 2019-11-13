@@ -52,8 +52,8 @@ fn main() {
 
     // TODO: move no-app shaders to base
     let mut object = ObjectPrototype {
-        vs_path: relative_path("shaders/no-app/vert.glsl"),
-        fs_path: relative_path("shaders/no-app/frag.glsl"),
+        vs_path: relative_path("shaders/base/vert.glsl"),
+        fs_path: relative_path("shaders/base/frag.glsl"),
         fill_type: PrimitiveTopology::TriangleList,
         read_depth: true,
         write_depth: true,
@@ -78,9 +78,8 @@ fn main() {
         (object.collection.0).1 = camera_data;
 
         // draw
-        system.begin_render_window(&mut window);
-        system.next_pass();
-        system.draw_object(object.clone());
+        system.start_window(&mut window);
+        system.add_object(object.clone());
         system.finish_to_window(&mut window);
     }
 
