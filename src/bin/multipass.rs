@@ -87,4 +87,5 @@ fn main() {
     }
 
     println!("FPS: {}", window.get_fps());
+    system.print_stats();
 }

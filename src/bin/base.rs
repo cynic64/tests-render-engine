@@ -3,6 +3,7 @@ use render_engine::render_passes;
 use render_engine::system::{Pass, System};
 use render_engine::window::Window;
 use render_engine::object::ObjectPrototype;
+use render_engine::utils::Timer;
 
 use nalgebra_glm::*;
 
@@ -63,25 +64,30 @@ fn main() {
         ),
         custom_dynamic_state: None,
     }
-    .build(queue.clone());
+    .build(queue.clone(), render_pass.clone());
+
+    let mut camera_timer = Timer::new("Camera uniform buffer");
 
     while !window.update() {
+        camera_timer.start();
         // update camera and camera buffer
         camera.update(window.get_frame_info());
 
         let camera_data = camera.get_data();
 
-        // TODO: i think it is better to move to a system where objects are as
-        // concrete as possible. a SceneGraph trait would be most flexible! you
-        // could define any struct you wanted to to store all your objects in
-        // whatever fashion, and types would be included until very late.
-        (object.collection.0).1 = camera_data;
+        (object.collection.data.0).1 = camera_data;
+        object.collection.upload(queue.clone());
+        camera_timer.stop();
 
         // draw
         system.start_window(&mut window);
-        system.add_object(object.clone());
+        system.add_object(&object);
         system.finish_to_window(&mut window);
     }
 
     println!("FPS: {}", window.get_fps());
+    println!("Avg. delta: {}", window.get_avg_delta() * 1_000.0);
+    window.print_avg_update();
+    system.print_stats();
+    camera_timer.print();
 }

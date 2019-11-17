@@ -6,7 +6,7 @@ Object: mesh + other stuff.
 
 use render_engine::mesh::{Mesh, PrimitiveTopology, Vertex};
 use render_engine::utils::load_texture;
-use render_engine::{Format, Queue, Image};
+use render_engine::{Format, Queue, Image, RenderPass};
 use render_engine::object::{ObjectPrototype, Object};
 
 use crate::relative_path;
@@ -184,7 +184,7 @@ pub fn add_tangents(mesh: &Mesh<VPosTexNorm>) -> Mesh<VPosTexNormTan> {
     }
 }
 
-pub fn fullscreen_quad(queue: Queue, vs_path: PathBuf, fs_path: PathBuf) -> Object<()> {
+pub fn fullscreen_quad(queue: Queue, render_pass: RenderPass, vs_path: PathBuf, fs_path: PathBuf) -> Object<()> {
     ObjectPrototype {
         vs_path,
         fs_path,
@@ -211,7 +211,7 @@ pub fn fullscreen_quad(queue: Queue, vs_path: PathBuf, fs_path: PathBuf) -> Obje
         collection: (),
         custom_dynamic_state: None,
     }
-    .build(queue)
+    .build(queue, render_pass)
 }
 
 pub fn wireframe(mesh: &Mesh<VPos>) -> Mesh<VPos> {
