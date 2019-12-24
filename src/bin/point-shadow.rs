@@ -1,10 +1,10 @@
 use render_engine as re;
 
 use re::collection_cache::pds_for_buffers;
-use re::mesh::{ObjectPrototype, PrimitiveTopology};
+use re::mesh::PrimitiveTopology;
+use re::object::{ObjectPrototype, Object};
 use re::pipeline_cache::PipelineSpec;
-use re::system::{Pass, RenderableObject, System};
-use re::utils::bufferize_data;
+use re::system::{Pass, System};
 use re::window::Window;
 use re::{render_passes, Format, Image, Pipeline, Queue, Set};
 
@@ -16,7 +16,7 @@ use nalgebra_glm::*;
 use std::collections::HashMap;
 
 use tests_render_engine::mesh::{convert_meshes, fullscreen_quad, load_obj};
-use tests_render_engine::{relative_path, OrbitCamera};
+use tests_render_engine::{relative_path, OrbitCamera, Matrix4};
 
 // patches are laid out in a 6x1
 const SHADOW_MAP_DIMS: [u32; 2] = [6144, 1024];
@@ -72,8 +72,7 @@ fn main() {
     window.set_render_pass(rpass1.clone());
 
     // create buffer and set for model matrix
-    let model_data: [[f32; 4]; 4] = Mat4::identity().into();
-    let model_buffer = bufferize_data(queue.clone(), model_data);
+    let model_data: Matrix4 = Mat4::identity().into();
 
     // initialize camera
     let mut camera = OrbitCamera::default();
@@ -83,30 +82,23 @@ fn main() {
         load_obj(&relative_path("meshes/shadowtest.obj")).expect("Couldn't load OBJ file");
     let mesh = convert_meshes(&[models.remove(0)]).remove(0);
 
-    let mut base_object = ObjectPrototype {
+    let mut final_object = ObjectPrototype {
         vs_path: relative_path("shaders/point-shadow/shadow_cast_vert.glsl"),
         fs_path: relative_path("shaders/point-shadow/shadow_cast_frag.glsl"),
         fill_type: PrimitiveTopology::TriangleList,
         read_depth: true,
         write_depth: true,
         mesh,
-        custom_sets: vec![], // will be filled in later
+        collection: (
+        ),
         custom_dynamic_state: None,
     }
-    .into_renderable_object(queue.clone());
-
-    // create pipeline for shadow casting shaders
-    let pipe_caster = base_object
-        .pipeline_spec
-        .concrete(device.clone(), rpass1.clone());
-
-    // set for model uniform
-    let model_set = pds_for_buffers(pipe_caster.clone(), &[model_buffer], 0).unwrap();
-    base_object.custom_sets = vec![model_set];
+    .build(queue.clone(), render_pass.clone());
 
     // create fullscreen quad to debug cubemap
     let quad = fullscreen_quad(
         queue.clone(),
+        rpass2.clone(),
         relative_path("shaders/point-shadow/display_cubemap_vert.glsl"),
         relative_path("shaders/point-shadow/display_cubemap_frag.glsl"),
     );
@@ -117,7 +109,7 @@ fn main() {
 
     // create a version of the base object with shaders for rendering the
     // final image
-    let object_final = RenderableObject {
+    let object_final = Object {
         pipeline_spec: PipelineSpec {
             vs_path: relative_path("shaders/point-shadow/final_vert.glsl"),
             fs_path: relative_path("shaders/point-shadow/final_frag.glsl"),

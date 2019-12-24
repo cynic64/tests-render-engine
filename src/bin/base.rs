@@ -75,7 +75,7 @@ fn main() {
 
         let camera_data = camera.get_data();
 
-        (object.collection.1).data.0 = camera_data;
+        object.collection.1.data.0 = camera_data;
 
         object.collection.1.upload(device.clone());
         camera_timer.stop();

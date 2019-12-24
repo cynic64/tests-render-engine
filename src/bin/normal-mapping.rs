@@ -6,7 +6,8 @@ Why do I have to manage queue and device? :(
 */
 
 use re::input::get_elapsed;
-use re::mesh::{Mesh, ObjectPrototype, PrimitiveTopology};
+use re::mesh::{Mesh, PrimitiveTopology};
+use re::object::ObjectPrototype;
 use re::render_passes;
 use re::system::{Pass, System};
 use re::utils::load_texture;
@@ -18,7 +19,6 @@ use vulkano::format::Format;
 use nalgebra_glm::*;
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use tests_render_engine::mesh::{
     add_tangents, convert_meshes, load_obj, merge, only_pos_from_ptnt, wireframe, VPosTexNormTan,
@@ -40,7 +40,6 @@ fn main() {
                 "resolve_color",
                 "multisampeld_color",
                 "multisampled_depth",
-                "resolve_depth",
             ],
             images_needed_tags: vec![],
             render_pass: render_pass.clone(),
@@ -97,7 +96,7 @@ fn main() {
         ),
         custom_dynamic_state: None,
     }
-    .into_renderable_object(queue.clone());
+    .build(queue.clone(), render_pass.clone());
 
     let mut normals = ObjectPrototype {
         vs_path: relative_path("shaders/normal-mapping/debug_vert.glsl"),
@@ -112,10 +111,9 @@ fn main() {
         ),
         custom_dynamic_state: None,
     }
-    .into_renderable_object(queue.clone());
+    .build(queue.clone(), render_pass.clone());
 
-    // used in main loop
-    let mut all_objects = HashMap::new();
+    // used to calculate light's position
     let start_time = std::time::Instant::now();
 
     while !window.update() {
@@ -130,23 +128,18 @@ fn main() {
         light.position = [light_x, 0.0, light_z];
 
         // update raptor collection
-        raptor.collection = Arc::new(
-            (
-                (model_data,),
-                (camera_data.clone(),),
-                (light.clone(),),
-                (normal_texture.clone(),),
-            ),
-        );
+        raptor.collection.1.data.0 = camera_data.clone();
+        raptor.collection.2.data.0 = light.clone();
+
+        raptor.collection.1.upload(device.clone());
+        raptor.collection.2.upload(device.clone());
 
         // update normal vis collection
-        normals.collection = Arc::new(
-            (
-                (model_data,),
-                (camera_data,),
-            ),
-        );
+        normals.collection.1.data.0 = camera_data;
+        normals.collection.1.upload(device.clone());
 
+        // if C is pressed, switch to the debugging fragment shader which
+        // renders the raptor's surface showing normals instead of as white
         if window.get_frame_info().keys_down.c {
             raptor.pipeline_spec.fs_path =
                 relative_path("shaders/normal-mapping/object_frag_debug.glsl");
@@ -154,15 +147,16 @@ fn main() {
             raptor.pipeline_spec.fs_path = relative_path("shaders/normal-mapping/object_frag.glsl");
         }
 
-        let objects = if window.get_frame_info().keys_down.c {
-            vec![raptor.clone(), normals.clone()]
-        } else {
-            vec![raptor.clone()]
-        };
-        all_objects.insert("geometry", objects);
-
         // draw
-        system.render_to_window(&mut window, all_objects.clone());
+        system.start_window(&mut window);
+        system.add_object(&raptor);
+
+        // if C is pressed, draw lines showing normals
+        if window.get_frame_info().keys_down.c {
+            system.add_object(&normals);
+        }
+
+        system.finish_to_window(&mut window);
     }
 
     println!("FPS: {}", window.get_fps());
@@ -204,7 +198,7 @@ fn normals_vis(mesh: &Mesh<VPosTexNormTan>) -> Mesh<VPosColor> {
                     position: (position + normal * 0.2).into(),
                     color: [1.0, 0.0, 0.0],
                 },
-                // line to show normal, colored red
+                // line to show tangent, colored green
                 VPosColor {
                     position: v.position,
                     color: [0.0, 1.0, 0.0],

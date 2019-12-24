@@ -117,8 +117,8 @@ fn main() {
         let light_z = (time / 4.0).cos() * 20.0;
         light.position = [light_x, 0.0, light_z, 0.0];
 
-        (object.collection.1).data.0 = camera_data;
-        (object.collection.2).data.0 = light.clone();
+        object.collection.1.data.0 = camera_data;
+        object.collection.2.data.0 = light.clone();
 
         object.collection.1.upload(device.clone());
         object.collection.2.upload(device.clone());

@@ -1,23 +1,20 @@
-use render_engine::collection_cache::pds_for_buffers;
+use render_engine::collection::{Data, Set};
 use render_engine::input::get_elapsed;
-use render_engine::mesh::{PrimitiveTopology, VertexType, ObjectPrototype};
-use render_engine::pipeline_cache::PipelineSpec;
+use render_engine::mesh::PrimitiveTopology;
+use render_engine::object::{Object, ObjectPrototype};
 use render_engine::render_passes;
-use render_engine::system::{Pass, System, RenderableObject};
-use render_engine::utils::bufferize_data;
+use render_engine::system::{Pass, System};
 use render_engine::window::Window;
-use render_engine::{Buffer, Queue};
+use render_engine::Image;
 
 use std::collections::HashMap;
 use std::env;
 use std::path::Path;
 
-use nalgebra_glm::{Mat4, vec3, scale};
+use nalgebra_glm::{scale, vec3, Mat4};
 
-use tests_render_engine::mesh::{
-    add_tangents_multi, convert_meshes, load_obj, load_textures, VPosTexNormTan,
-};
-use tests_render_engine::{relative_path, FlyCamera};
+use tests_render_engine::mesh::{add_tangents_multi, convert_meshes, load_obj, load_textures};
+use tests_render_engine::{relative_path, CameraData, FlyCamera, Matrix4};
 
 fn main() {
     // get path to load_obj
@@ -43,7 +40,6 @@ fn main() {
                 "resolve_color",
                 "multisampled_color",
                 "multisampled_depth",
-                "resolve_depth",
             ],
             images_needed_tags: vec![],
             render_pass: render_pass.clone(),
@@ -59,42 +55,40 @@ fn main() {
     let mut camera = FlyCamera::default();
 
     // light
-    let light = MovingLight::new();
-
-    // create a pipeline identical to the one that will be used to draw all
-    // objects. needed to create sets for the textures
-    let pipeline_spec = PipelineSpec {
-        vs_path: relative_path("shaders/obj-viewer/vert.glsl"),
-        fs_path: relative_path("shaders/obj-viewer/frag.glsl"),
-        fill_type: PrimitiveTopology::TriangleList,
-        read_depth: true,
-        write_depth: true,
-        vtype: VertexType::<VPosTexNormTan>::new(),
-    };
-    let pipeline = pipeline_spec.concrete(device.clone(), render_pass.clone());
+    let moving_light = MovingLight::new();
+    let light_data = moving_light.get_data();
 
     // load meshes and materials
     let (models, materials) = load_obj(&path).expect("Couldn't open OBJ file");
     let meshes = add_tangents_multi(&convert_meshes(&models));
     let textures_path = path.parent().expect("Given path has no parent!");
     println!("Searching for textures in {:?}", textures_path);
-    let texture_sets = load_textures(queue.clone(), pipeline.clone(), textures_path, &materials, 1);
+    let texture_sets = load_textures(queue.clone(), textures_path, &materials);
 
-    // create a default Material (todo: get rid of this)
-    let material = Material {
+    let default_material = Material {
         ambient: [1.0, 1.0, 1.0, 0.0],
-        diffuse: [1.0, 1.0, 1.0, 0.0],
+        diffuse: [0.0, 0.0, 1.0, 0.0],
         specular: [1.0, 1.0, 1.0, 0.0],
         shininess: [32.0, 0.0, 0.0, 0.0],
-        use_texture: [1.0, 0.0, 0.0, 0.0],
+        use_texture: [0.0, 0.0, 0.0, 0.0],
     };
-    let material_buffer = bufferize_data(queue.clone(), material);
-    let model: [[f32; 4]; 4] = scale(&Mat4::identity(), &vec3(0.1, 0.1, 0.1)).into();
-    let model_buffer = bufferize_data(queue.clone(), model);
-    let material_model_set = pds_for_buffers(pipeline.clone(), &[material_buffer, model_buffer], 0).unwrap();
+    let model_mat: Matrix4 = Mat4::identity().into();
 
     // combine the meshes and textures to create a list of renderable objects
-    let objects: Vec<RenderableObject> = meshes
+
+    // i don't think the type annotation is necessary is here, but i included it
+    // anyway to show how information about the object's uniforms is stored in
+    // its type.
+    let mut objects: Vec<
+        Object<(
+            // material and model matrix
+            Set<(Material, Matrix4)>,
+            // textures (diffuse, specular, normal)
+            Set<(Image, Image, Image)>,
+            // camera matrices and light position
+            Set<(CameraData, Light)>,
+        )>,
+    > = meshes
         .into_iter()
         .enumerate()
         .map(|(idx, mesh)| {
@@ -106,60 +100,71 @@ fn main() {
                 println!("Model {} has no material id! Using 0.", model.name);
                 0
             };
-            let texture_set = texture_sets[mat_idx].clone();
 
-            ObjectPrototype {
+            let material = if model.mesh.material_id.is_some() && mat_idx < materials.len() {
+                Material::from_tobj(&materials[mat_idx])
+            } else {
+                default_material.clone()
+            };
+
+            let textures = texture_sets[mat_idx].clone();
+
+            let object = ObjectPrototype {
                 vs_path: relative_path("shaders/obj-viewer/vert.glsl"),
                 fs_path: relative_path("shaders/obj-viewer/frag.glsl"),
                 fill_type: PrimitiveTopology::TriangleList,
                 read_depth: true,
                 write_depth: true,
                 mesh,
-                custom_sets: vec![material_model_set.clone(), texture_set],
+                collection: (
+                    (material.clone(), model_mat),
+                    textures,
+                    (camera.get_data(), light_data.clone()),
+                ),
                 custom_dynamic_state: None,
             }
-            .into_renderable_object(queue.clone())
+            .build(queue.clone(), render_pass.clone());
+
+            object
         })
         .collect();
 
     println!("Objects Loaded: {}", objects.len());
-    let mut all_objects = HashMap::new();
 
     // used in main loop
     while !window.update() {
-        // update camera and light
+        // get updated info on camera and light
         camera.update(window.get_frame_info());
-        let camera_buffer = camera.get_buffer(queue.clone());
+        let camera_data = camera.get_data();
+        let light_data = moving_light.get_data();
 
-        let light_buffer = light.get_buffer(queue.clone());
-        let camera_light_set =
-            pds_for_buffers(pipeline.clone(), &[camera_buffer, light_buffer], 2).unwrap(); // 0 is the descriptor set idx
-
-        all_objects.insert(
-            "geometry",
-            objects
-                .clone()
-                .iter_mut()
-                .map(|obj| {
-                    // add camera set to each object before adding it to the scene
-                    obj.custom_sets.push(camera_light_set.clone());
-                    obj.clone()
-                })
-                .collect(),
-        );
+        // update collections
+        objects.iter_mut().for_each(|obj| {
+            obj.collection.2.data.0 = camera_data.clone();
+            obj.collection.2.data.1 = light_data.clone();
+            obj.collection.2.upload(device.clone());
+        });
 
         // draw
-        system.render_to_window(&mut window, all_objects.clone());
+        system.start_window(&mut window);
+
+        for object in objects.iter() {
+            system.add_object(object);
+        }
+
+        system.finish_to_window(&mut window);
     }
 
     println!("FPS: {}", window.get_fps());
 }
 
-#[allow(dead_code)]
+#[derive(Clone)]
 struct Light {
     direction: [f32; 4],
     power: f32,
 }
+
+impl Data for Light {}
 
 struct MovingLight {
     start_time: std::time::Instant,
@@ -172,22 +177,47 @@ impl MovingLight {
         }
     }
 
-    fn get_buffer(&self, queue: Queue) -> Buffer {
+    fn get_data(&self) -> Light {
         let time = get_elapsed(self.start_time) / 4.0;
-        let data = Light {
+        Light {
             direction: [time.sin(), 2.0, time.cos(), 0.0],
             power: 1.0,
-        };
-
-        bufferize_data(queue.clone(), data)
+        }
     }
 }
 
-#[allow(dead_code)]
+#[derive(Clone)]
 struct Material {
     ambient: [f32; 4],
     diffuse: [f32; 4],
     specular: [f32; 4],
     shininess: [f32; 4],
     use_texture: [f32; 4],
+}
+
+impl Data for Material {}
+
+impl Material {
+    fn from_tobj(material: &tobj::Material) -> Self {
+        let (amb, diff, spec) = (material.ambient, material.diffuse, material.specular);
+        let shine = material.shininess;
+
+        let use_tex = if contains_textures(&material) {
+            1.0
+        } else {
+            0.0
+        };
+
+        Material {
+            ambient: [amb[0], amb[1], amb[2], 1.0],
+            diffuse: [diff[0], diff[1], diff[2], 1.0],
+            specular: [spec[0], spec[1], spec[2], 1.0],
+            shininess: [shine, 0.0, 0.0, 0.0],
+            use_texture: [use_tex, 0.0, 0.0, 0.0],
+        }
+    }
+}
+
+fn contains_textures(material: &tobj::Material) -> bool {
+    material.normal_texture != "" || material.specular_texture != "" || material.diffuse_texture != ""
 }
