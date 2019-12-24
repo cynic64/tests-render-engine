@@ -1,8 +1,9 @@
 use render_engine::input::get_elapsed;
-use render_engine::mesh::{ObjectPrototype, PrimitiveTopology};
+use render_engine::mesh::PrimitiveTopology;
+use render_engine::object::ObjectPrototype;
 use render_engine::render_passes;
 use render_engine::system::{Pass, System};
-use render_engine::utils::{bufferize_data, load_texture, default_sampler};
+use render_engine::utils::load_texture;
 use render_engine::window::Window;
 use render_engine::collection::Data;
 
@@ -11,7 +12,6 @@ use nalgebra_glm::*;
 use vulkano::format::Format;
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use tests_render_engine::mesh::{add_tangents, convert_meshes, load_obj};
 use tests_render_engine::{relative_path, OrbitCamera, Matrix4};
@@ -31,7 +31,6 @@ fn main() {
                 "resolve_color",
                 "multisampeld_color",
                 "multisampled_depth",
-                "resolve_depth",
             ],
             images_needed_tags: vec![],
             render_pass: render_pass.clone(),
@@ -85,14 +84,6 @@ fn main() {
     let basic_mesh = convert_meshes(&[models.remove(0)]).remove(0);
     let mesh = add_tangents(&basic_mesh);
 
-    // 00 model 01 material 10 camera 20 light 30 diff 31 spec 32 norm
-    let mut collection = (
-        (model_data, material_data),
-        (camera_data,),
-        (light.clone(),),
-        (diffuse_texture, specular_texture, normal_texture),
-    );
-
     let mut object = ObjectPrototype {
         vs_path: relative_path("shaders/lighting/object_vert.glsl"),
         fs_path: relative_path("shaders/lighting/object_frag.glsl"),
@@ -100,10 +91,17 @@ fn main() {
         read_depth: true,
         write_depth: true,
         mesh,
-        collection: collection.clone(),
+
+        // 00 model 01 material 10 camera 20 light 30 diff 31 spec 32 norm
+        collection: (
+            (model_data, material_data),
+            (camera_data,),
+            (light.clone(),),
+            (diffuse_texture, specular_texture, normal_texture),
+        ),
         custom_dynamic_state: None,
     }
-    .into_renderable_object(queue.clone());
+    .build(queue.clone(), render_pass.clone());
 
     // used in main loop
     let start_time = std::time::Instant::now();
@@ -119,16 +117,16 @@ fn main() {
         let light_z = (time / 4.0).cos() * 20.0;
         light.position = [light_x, 0.0, light_z, 0.0];
 
-        collection.1 = (camera_data,);
-        collection.2 = (light.clone(),);
+        (object.collection.1).data.0 = camera_data;
+        (object.collection.2).data.0 = light.clone();
 
-        object.collection = Arc::new(collection.clone());
-
-        let mut all_objects = HashMap::new();
-        all_objects.insert("geometry", vec![object.clone()]);
+        object.collection.1.upload(device.clone());
+        object.collection.2.upload(device.clone());
 
         // draw
-        system.render_to_window(&mut window, all_objects.clone());
+        system.start_window(&mut window);
+        system.add_object(&object);
+        system.finish_to_window(&mut window);
     }
 
     println!("FPS: {}", window.get_fps());

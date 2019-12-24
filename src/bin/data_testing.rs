@@ -1,4 +1,5 @@
-use render_engine::mesh::{Mesh, ObjectPrototype, PrimitiveTopology};
+use render_engine::mesh::{Mesh, PrimitiveTopology};
+use render_engine::object::ObjectPrototype;
 use render_engine::render_passes;
 use render_engine::system::{Pass, System};
 use render_engine::utils::load_texture;
@@ -64,11 +65,11 @@ fn main() {
         collection: ((model_data,),),
         custom_dynamic_state: None,
     }
-    .into_renderable_object(queue.clone());
+    .build(queue.clone(), render_pass.clone());
 
     let texture = load_texture(
         queue.clone(),
-        &relative_path("textures/raptor-diffuse.png"),
+        &relative_path("textures/rust-logo.png"),
         Format::B8G8R8A8Unorm,
     );
 
@@ -95,15 +96,15 @@ fn main() {
         collection: ((texture,),),
         custom_dynamic_state: None,
     }
-    .into_renderable_object(queue.clone());
+    .build(queue.clone(), render_pass.clone());
 
     // used in main loop
-    let mut all_objects = HashMap::new();
-    all_objects.insert("geometry", vec![object2, object1]);
-
     while !window.update() {
         // draw
-        system.render_to_window(&mut window, all_objects.clone());
+        system.start_window(&mut window);
+        system.add_object(&object2);
+        system.add_object(&object1);
+        system.finish_to_window(&mut window);
     }
 
     println!("FPS: {}", window.get_fps());

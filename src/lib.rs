@@ -1,6 +1,6 @@
 use render_engine::input::{FrameInfo, get_elapsed};
-use render_engine::utils::bufferize_data;
-use render_engine::{Buffer, Queue};
+use render_engine::utils::upload_data;
+use render_engine::{Buffer, Device};
 use render_engine::collection::Data;
 
 use nalgebra_glm::*;
@@ -327,13 +327,13 @@ impl MovingLight {
         }
     }
 
-    pub fn get_buffer(&self, queue: Queue) -> Buffer {
+    pub fn get_buffer(&self, device: Device) -> Buffer {
         let time = get_elapsed(self.start_time) / 4.0;
         let data = Light {
             direction: [time.sin(), 2.0, time.cos(), 0.0],
             power: 1.0,
         };
 
-        bufferize_data(queue, data)
+        upload_data(device, data)
     }
 }

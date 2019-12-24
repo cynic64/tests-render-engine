@@ -69,10 +69,11 @@ fn main() {
         collection: (),
         custom_dynamic_state: None,
     }
-    .build(queue.clone());
+    .build(queue.clone(), render_pass.clone());
 
     let quad = fullscreen_quad(
         queue.clone(),
+        render_pass.clone(),
         relative_path("shaders/multipass/postpro_vert.glsl"),
         relative_path("shaders/multipass/postpro_frag.glsl"),
     );

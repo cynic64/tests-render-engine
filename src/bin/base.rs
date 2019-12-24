@@ -27,7 +27,6 @@ fn main() {
                 "resolve_color",
                 "multisampled_color",
                 "multisampled_depth",
-                "resolve_depth",
             ],
             images_needed_tags: vec![],
             render_pass: render_pass.clone(),
@@ -50,8 +49,8 @@ fn main() {
     // only load 1st object
     let (mut models, _materials) = load_obj(&relative_path("meshes/dragon.obj")).expect("couldn't load OBJ");
     let mesh = convert_meshes(&[models.remove(0)]).remove(0);
+    dbg!["done loading meshes"];
 
-    // TODO: move no-app shaders to base
     let mut object = ObjectPrototype {
         vs_path: relative_path("shaders/base/vert.glsl"),
         fs_path: relative_path("shaders/base/frag.glsl"),
@@ -60,7 +59,8 @@ fn main() {
         write_depth: true,
         mesh,
         collection: (
-            (model_data, camera_data),
+            (model_data,),
+            (camera_data,),
         ),
         custom_dynamic_state: None,
     }
@@ -69,14 +69,15 @@ fn main() {
     let mut camera_timer = Timer::new("Camera uniform buffer");
 
     while !window.update() {
-        camera_timer.start();
         // update camera and camera buffer
+        camera_timer.start();
         camera.update(window.get_frame_info());
 
         let camera_data = camera.get_data();
 
-        (object.collection.data.0).1 = camera_data;
-        object.collection.upload(queue.clone());
+        (object.collection.1).data.0 = camera_data;
+
+        object.collection.1.upload(device.clone());
         camera_timer.stop();
 
         // draw
